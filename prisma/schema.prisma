@@ -19,9 +19,9 @@ model User {
 }
 
 model Juicio {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   userId          String
-  user            User     @relation(fields: [userId], references: [id])
+  user            User        @relation(fields: [userId], references: [id])
   tipo            String
   nro             String?
   autos           String
@@ -31,47 +31,9 @@ model Juicio {
   secretaria      String?
   sala            String?
   cosasRelevantes String?
+  advertencia     String?
   driveUrl        String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  tareas          Tarea[]
-  pruebas         Prueba[]
-  honorarios      Honorario[]
-}
-
-model Tarea {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id])
-  juicioId  String?
-  juicio    Juicio?   @relation(fields: [juicioId], references: [id])
-  texto     String
-  fecha     DateTime?
-  urgente   Boolean   @default(false)
-  done      Boolean   @default(false)
-  tipo      String?
-  createdAt DateTime  @default(now())
-}
-
-model Prueba {
-  id          String    @id @default(cuid())
-  juicioId    String
-  juicio      Juicio    @relation(fields: [juicioId], references: [id])
-  tipo        String
-  descripcion String?
-  estado      String    @default("Pendiente")
-  vencimiento DateTime?
-  createdAt   DateTime  @default(now())
-}
-
-model Honorario {
-  id           String   @id @default(cuid())
-  juicioId     String
-  juicio       Juicio   @relation(fields: [juicioId], references: [id])
-  parte        String
-  total        String
-  pagado       String?
-  estado       String   @default("Pendiente")
-  observaciones String?
-  createdAt    DateTime @default(now())
-}
+  iaUrl           String?
+  datosJuzgado    String?
+  datosContacto   String?
+  otra
