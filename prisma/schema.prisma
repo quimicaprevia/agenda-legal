@@ -36,6 +36,7 @@ model Juicio {
   updatedAt       DateTime @updatedAt
   tareas          Tarea[]
   pruebas         Prueba[]
+  honorarios      Honorario[]
 }
 
 model Tarea {
@@ -61,4 +62,16 @@ model Prueba {
   estado      String    @default("Pendiente")
   vencimiento DateTime?
   createdAt   DateTime  @default(now())
+}
+
+model Honorario {
+  id           String   @id @default(cuid())
+  juicioId     String
+  juicio       Juicio   @relation(fields: [juicioId], references: [id])
+  parte        String
+  total        String
+  pagado       String?
+  estado       String   @default("Pendiente")
+  observaciones String?
+  createdAt    DateTime @default(now())
 }

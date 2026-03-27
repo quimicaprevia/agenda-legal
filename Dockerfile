@@ -1,5 +1,4 @@
-FROM node:20-slim
-RUN apt-get update -y && apt-get install -y openssl
+FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
