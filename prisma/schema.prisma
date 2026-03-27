@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  juicios   Juicio[]
+  tareas    Tarea[]
+}
+
+model Juicio {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  tipo      String
+  nro       String?
+  autos     String
+  estado    String
+  fuero     String?
+  juzgado   String?
+  secretaria String?
+  sala      String?
+  cosasRelevantes String?
+  driveUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tareas    Tarea[]
+  pruebas   Prueba[]
+}
+
+model Tarea {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  juicioId  String?
+  juicio    Juicio?  @relation(fields: [juicioId], references: [id])
+  texto     String
+  fecha     DateTime?
+  urgente   Boolean  @default(false)
+  done      Boolean  @default(false)
+  tipo      String?
+  createdAt DateTime @default(now())
+}
+
+model Prueba {
+  id        String   @id @default(cuid())
+  juicioId  String
+  juicio    Juicio   @relation(fields: [juicioId], references: [id])
+  tipo      String
+  descripcion String?
+  estado    String   @default("Pendiente")
+  vencimiento DateTime?
+  createdAt DateTime @default(now())
+}
