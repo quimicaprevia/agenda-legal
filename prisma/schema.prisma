@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"`r`n  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]`n  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -18,47 +19,46 @@ model User {
 }
 
 model Juicio {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  tipo      String
-  nro       String?
-  autos     String
-  estado    String
-  fuero     String?
-  juzgado   String?
-  secretaria String?
-  sala      String?
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  tipo            String
+  nro             String?
+  autos           String
+  estado          String
+  fuero           String?
+  juzgado         String?
+  secretaria      String?
+  sala            String?
   cosasRelevantes String?
-  driveUrl  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tareas    Tarea[]
-  pruebas   Prueba[]
+  driveUrl        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tareas          Tarea[]
+  pruebas         Prueba[]
 }
 
 model Tarea {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
   juicioId  String?
-  juicio    Juicio?  @relation(fields: [juicioId], references: [id])
+  juicio    Juicio?   @relation(fields: [juicioId], references: [id])
   texto     String
   fecha     DateTime?
-  urgente   Boolean  @default(false)
-  done      Boolean  @default(false)
+  urgente   Boolean   @default(false)
+  done      Boolean   @default(false)
   tipo      String?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 }
 
 model Prueba {
-  id        String   @id @default(cuid())
-  juicioId  String
-  juicio    Juicio   @relation(fields: [juicioId], references: [id])
-  tipo      String
+  id          String    @id @default(cuid())
+  juicioId    String
+  juicio      Juicio    @relation(fields: [juicioId], references: [id])
+  tipo        String
   descripcion String?
-  estado    String   @default("Pendiente")
+  estado      String    @default("Pendiente")
   vencimiento DateTime?
-  createdAt DateTime @default(now())
+  createdAt   DateTime  @default(now())
 }
-
