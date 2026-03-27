@@ -1,12 +1,12 @@
 import { NextApiRequest, NextApiResponse } from "next"
 import { getServerSession } from "next-auth/next"
 import { PrismaClient } from "@prisma/client"
-import authOptions from "../auth/[...nextauth]"
+import { authOptions } from "../../lib/authOptions"
 
 const prisma = new PrismaClient()
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getServerSession(req, res, authOptions as any)
+  const session = await getServerSession(req, res, authOptions)
   if (!session?.user?.email) return res.status(401).json({ error: "No autorizado" })
 
   if (req.method === "POST") {
