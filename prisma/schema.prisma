@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"`n  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  provider = "prisma-client-js"`r`n  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]`n  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -61,3 +61,4 @@ model Prueba {
   vencimiento DateTime?
   createdAt DateTime @default(now())
 }
+
