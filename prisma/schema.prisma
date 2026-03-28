@@ -16,12 +16,14 @@ model User {
   createdAt DateTime @default(now())
   juicios   Juicio[]
   tareas    Tarea[]
+  asuntos   Asunto[]
+  clientes  ClienteJuicio[]
 }
 
 model Juicio {
-  id              String      @id @default(cuid())
+  id              String          @id @default(cuid())
   userId          String
-  user            User        @relation(fields: [userId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
   tipo            String
   nro             String?
   autos           String
@@ -34,28 +36,32 @@ model Juicio {
   advertencia     String?
   driveUrl        String?
   iaUrl           String?
+  pjnUrl          String?
   datosJuzgado    String?
   datosContacto   String?
   otraInfo        String?
-  createdAt       DateTime    @default(now())
+  createdAt       DateTime        @default(now())
   tareas          Tarea[]
   pruebas         Prueba[]
   honorarios      Honorario[]
+  clientes        ClienteJuicio[]
 }
 
 model Tarea {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
   juicioId  String?
-  juicio    Juicio?  @relation(fields: [juicioId], references: [id])
+  juicio    Juicio?   @relation(fields: [juicioId], references: [id])
+  asuntoId  String?
+  asunto    Asunto?   @relation(fields: [asuntoId], references: [id])
   texto     String
   fecha     DateTime?
-  urgente   Boolean  @default(false)
-  done      Boolean  @default(false)
+  urgente   Boolean   @default(false)
+  done      Boolean   @default(false)
   tipo      String?
   tema      String?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 }
 
 model Prueba {
@@ -63,6 +69,7 @@ model Prueba {
   juicioId    String
   juicio      Juicio    @relation(fields: [juicioId], references: [id])
   tipo        String
+  contenido   String?
   descripcion String?
   detalle     String?
   estado      String    @default("Ofrecida")
@@ -71,13 +78,43 @@ model Prueba {
 }
 
 model Honorario {
-  id            String   @id @default(cuid())
-  juicioId      String
-  juicio        Juicio   @relation(fields: [juicioId], references: [id])
+  id                 String   @id @default(cuid())
+  juicioId           String
+  juicio             Juicio   @relation(fields: [juicioId], references: [id])
   clienteContraparte String?
-  total         String?
-  pagado        String?
-  estado        String   @default("Pendiente")
-  observaciones String?
-  createdAt     DateTime @default(now())
+  total              String?
+  pagado             String?
+  estado             String   @default("Pendiente")
+  observaciones      String?
+  createdAt          DateTime @default(now())
+}
+
+model Asunto {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  nombre      String
+  tipo        String
+  estado      String   @default("Abierta")
+  advertencia String?
+  otraInfo    String?
+  driveUrl    String?
+  webUrl      String?
+  createdAt   DateTime @default(now())
+  tareas      Tarea[]
+}
+
+model ClienteJuicio {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  juicioId  String
+  juicio    Juicio   @relation(fields: [juicioId], references: [id], onDelete: Cascade)
+  apellido  String
+  nombre    String
+  dni       String?
+  correo    String?
+  telefono  String?
+  domicilio String?
+  createdAt DateTime @default(now())
 }
