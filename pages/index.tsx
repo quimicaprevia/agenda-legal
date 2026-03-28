@@ -97,12 +97,10 @@ export default function Home() {
     .filter(t=>!(t.juicioId&&inactivosSet.has(t.juicioId)))
     .map(t=>({...t,...(cambios[t.id]||{})}))
   // Separar en secciones (el orden dentro de cada sección respeta vistaCongelada)
-  const urgentesArriba = vistaActual.filter(t=>!t.done&&t.urgente&&(esAtrasada(t)||esHoy(t)))
-  const atrasadas = vistaActual.filter(t=>!t.done&&esAtrasada(t)&&!urgentesArriba.find(u=>u.id===t.id))
-  const vencenHoy = vistaActual.filter(t=>!t.done&&esHoy(t)&&!urgentesArriba.find(u=>u.id===t.id))
-  const proximas = vistaActual.filter(t=>!t.done&&esProxima(t)&&!urgentesArriba.find(u=>u.id===t.id))
-  // Incluir recién completadas (done=true en cambios) para mostrarlas tachadas en su lugar
-  const completadasRecientes = vistaActual.filter(t=>t.done)
+  const urgentesArriba = vistaActual.filter(t=>t.urgente&&(esAtrasada(t)||esHoy(t)))
+  const atrasadas = vistaActual.filter(t=>esAtrasada(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const vencenHoy = vistaActual.filter(t=>esHoy(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const proximas = vistaActual.filter(t=>esProxima(t)&&!urgentesArriba.find(u=>u.id===t.id))
 
   const hayPendientes = Object.keys(cambios).length > 0
 
@@ -256,20 +254,11 @@ export default function Home() {
   }
 
   const seccion = (label:string, items:Tarea[], color?:string) => {
-    // Incluir en la sección las completadas recientes que pertenecen a ella
-    const completadasDeEsta = completadasRecientes.filter(t=>{
-      if(label==="URGENTES") return t.urgente&&(esAtrasada(t)||esHoy(t))
-      if(label==="ATRASADAS") return esAtrasada(t)&&!(t.urgente&&(esAtrasada(t)||esHoy(t)))
-      if(label==="HOY") return esHoy(t)&&!(t.urgente&&(esAtrasada(t)||esHoy(t)))
-      if(label==="PRÓXIMAS TAREAS") return esProxima(t)
-      return false
-    })
-    const todas = [...items,...completadasDeEsta]
-    if(todas.length===0) return null
+    if(items.length===0) return null
     return (
       <div key={label}>
         <div style={{...S.sectionLabel,color:color||"#888"}}>{label}</div>
-        {todas.map(t=>renderTarea(t))}
+        {items.map(t=>renderTarea(t))}
       </div>
     )
   }
@@ -508,7 +497,7 @@ export default function Home() {
                 {seccion("ATRASADAS",atrasadas,"#9B59B6")}
                 {seccion("HOY",vencenHoy,"#378ADD")}
                 {seccion("PRÓXIMAS TAREAS",proximas,"#555")}
-                {vistaActual.filter(t=>!t.done).length===0&&completadasRecientes.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
+                {vistaActual.filter(t=>!t.done).length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
               </>}
             </div>
           )}
