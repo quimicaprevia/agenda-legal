@@ -843,10 +843,6 @@ export default function Home() {
   const fldJ = (k:keyof JuicioForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setFormJuicio(p=>({...p,[k]:e.target.value}))
   const fldA = (k:keyof AsuntoForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setFormAsunto(p=>({...p,[k]:e.target.value}))
 
-  const honorariosPendientes = juicios.flatMap(j=>
-    (j.honorarios||[]).filter(h=>h.estado!=="Pago total").map(h=>({...h,autos:j.autos}))
-  )
-
   const asuntosProbono  = asuntos.filter(a=>a.tipo==="probono")
   const asuntosDocencia = asuntos.filter(a=>a.tipo==="docencia")
   const tareasPersonales = tareas.filter(t=>t.tipo==="Personales"&&!t.done)
