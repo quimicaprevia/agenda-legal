@@ -1,75 +1,131 @@
 import { useSession, signIn, signOut } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 
-type Prueba = { id: string; tipo: string; contenido?: string; detalle?: string; estado: string }
-type Tarea = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; juicio?: { autos: string; id: string } }
+// ─── TIPOS ───────────────────────────────────────────────────────────────────
+type Prueba    = { id: string; tipo: string; contenido?: string; detalle?: string; estado: string }
 type Honorario = { id: string; clienteContraparte?: string; total?: string; pagado?: string; estado: string; observaciones?: string }
-type Juicio = { id: string; nro?: string; autos: string; estado: string; fuero?: string; juzgado?: string; secretaria?: string; sala?: string; cosasRelevantes?: string; advertencia?: string; driveUrl?: string; iaUrl?: string; datosJuzgado?: string; datosContacto?: string; otraInfo?: string; tareas: Tarea[]; pruebas: Prueba[]; honorarios?: Honorario[] }
-type JuicioForm = { autos: string; estado: string; nro: string; fuero: string; juzgado: string; secretaria: string; sala: string; advertencia: string; cosasRelevantes: string; datosJuzgado: string; datosContacto: string; otraInfo: string; driveUrl: string; iaUrl: string }
+type ClienteJuicio = { id: string; apellido: string; nombre: string; dni?: string; correo?: string; telefono?: string; domicilio?: string }
+type Tarea     = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; asuntoId?: string; juicio?: { autos: string; id: string } }
+type Juicio    = { id: string; nro?: string; autos: string; estado: string; fuero?: string; juzgado?: string; secretaria?: string; sala?: string; advertencia?: string; driveUrl?: string; iaUrl?: string; datosJuzgado?: string; otraInfo?: string; tareas: Tarea[]; pruebas: Prueba[]; honorarios?: Honorario[]; clientes?: ClienteJuicio[] }
+type Asunto    = { id: string; nombre: string; tipo: string; estado: string; advertencia?: string; otraInfo?: string; driveUrl?: string; webUrl?: string; tareas: Tarea[] }
 
-const FORM_VACIO: JuicioForm = { autos:"", estado:"Judicializado", nro:"", fuero:"", juzgado:"", secretaria:"", sala:"", advertencia:"", cosasRelevantes:"", datosJuzgado:"", datosContacto:"", otraInfo:"", driveUrl:"", iaUrl:"" }
-const ESTADOS: Record<string,string> = { "Judicializado":"#E6F1FB","Preparación":"#FAEEDA","Mediacion":"#FAEEDA","Inicio":"#FAEEDA","Finalizado":"#EAF3DE","Renunciado":"#F1EFE8","En Trámite":"#E6F1FB" }
-const ESTADOS_TEXT: Record<string,string> = { "Judicializado":"#185FA5","Preparación":"#633806","Mediacion":"#633806","Inicio":"#633806","Finalizado":"#3B6D11","Renunciado":"#444441","En Trámite":"#185FA5" }
-const TODOS_ESTADOS = ["Judicializado","Preparación","Mediacion","Inicio","Finalizado","Renunciado","En Trámite"]
-const TIPOS_PRUEBA = ["Confesional","Informativa","Testimonial","Reconocimiento","Pericial contable","Pericial informática","Pericial médica","Pericial técnica","Pericial (otra)"]
-const ESTADOS_PRUEBA = ["Ofrecida","En curso","Desistida","Finalizada"]
-const ESTADOS_HONORARIO = ["Pendiente","Pago Parcial","Pago total"]
+type JuicioForm = { autos: string; estado: string; nro: string; fuero: string; juzgado: string; secretaria: string; sala: string; advertencia: string; datosJuzgado: string; otraInfo: string; driveUrl: string; iaUrl: string; pjnUrl: string }
+type AsuntoForm = { nombre: string; tipo: string; estado: string; advertencia: string; otraInfo: string; driveUrl: string; webUrl: string }
+
+// ─── CONSTANTES ──────────────────────────────────────────────────────────────
+const FORM_JUICIO_VACIO: JuicioForm = { autos:"", estado:"Judicializado", nro:"", fuero:"", juzgado:"", secretaria:"", sala:"", advertencia:"", datosJuzgado:"", otraInfo:"", driveUrl:"", iaUrl:"", pjnUrl:"" }
+const FORM_ASUNTO_VACIO: AsuntoForm = { nombre:"", tipo:"probono", estado:"Abierta", advertencia:"", otraInfo:"", driveUrl:"", webUrl:"" }
+
+const TODOS_ESTADOS_JUICIO = ["Inicio","Mediación","Administrativo","En preparación","Judicializado","Finalizado","Renunciado"]
 const INACTIVOS = ["Finalizado","Renunciado"]
-const TIPOS_TAREA = ["Juicio","Pro Bono","Docencia","Personales"]
-const FRANJA_COLOR: Record<string,string> = { "Juicio":"#378ADD","Pro Bono":"#3B6D11","Docencia":"#BA7517","Personales":"#9B59B6" }
 
+const ESTADOS_BG: Record<string,string>   = { "Judicializado":"#E6F1FB","En preparación":"#FAEEDA","Mediación":"#FAEEDA","Administrativo":"#FFF3E0","Inicio":"#FAEEDA","Finalizado":"#EAF3DE","Renunciado":"#F1EFE8" }
+const ESTADOS_TX: Record<string,string>   = { "Judicializado":"#185FA5","En preparación":"#633806","Mediación":"#633806","Administrativo":"#7A4800","Inicio":"#633806","Finalizado":"#3B6D11","Renunciado":"#444441" }
+
+const TIPOS_PRUEBA   = ["Confesional","Informativa","Testimonial","Reconocimiento","Pericial contable","Pericial informática","Pericial médica","Pericial técnica","Pericial (otra)"]
+const ESTADOS_PRUEBA = ["Ofrecida","En curso","Desistida","Finalizada"]
+const ESTADOS_HON    = ["Pendiente","Pago Parcial","Pago total"]
+const TIPOS_TAREA    = ["Casos y Juicios","Pro Bono","Docencia","Personales"]
+const FRANJA: Record<string,string> = { "Casos y Juicios":"#378ADD","Pro Bono":"#3B6D11","Docencia":"#BA7517","Personales":"#9B59B6" }
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
 function parseFecha(s: string): Date { const [y,m,d]=s.split("T")[0].split("-").map(Number); return new Date(y,m-1,d) }
 function formatFecha(s: string): string { return parseFecha(s).toLocaleDateString("es-AR") }
+function hoyDate(): Date { const h=new Date(); h.setHours(0,0,0,0); return h }
 
+// ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 export default function Home() {
   const { data: session, status } = useSession()
-  const [panel, setPanel] = useState("tareas")
-  const [juicios, setJuicios] = useState<Juicio[]>([])
-  const [tareas, setTareas] = useState<Tarea[]>([])
-  const [expandido, setExpandido] = useState<string|null>(null)
-  const [tabActiva, setTabActiva] = useState<Record<string,string>>({})
+
+  // Estado global
+  const [panel, setPanel]       = useState("tareas")
+  const [juicios, setJuicios]   = useState<Juicio[]>([])
+  const [asuntos, setAsuntos]   = useState<Asunto[]>([])
+  const [tareas, setTareas]     = useState<Tarea[]>([])
+  const [loading, setLoading]   = useState(true)
+
+  // Vista congelada (panel tareas)
+  const [vistaCongelada, setVistaCongelada] = useState<Tarea[]>([])
+  const [cambios, setCambios]               = useState<Record<string,Partial<Tarea>>>({})
+
+  // Expansión / tabs
+  const [expandido, setExpandido]   = useState<string|null>(null)
+  const [tabActiva, setTabActiva]   = useState<Record<string,string>>({})
+
+  // Forms inline (por id de juicio/asunto)
   const [ntMap, setNtMap] = useState<Record<string,{texto:string;fecha:string;urgente:boolean}>>({})
   const [npMap, setNpMap] = useState<Record<string,{tipo:string;contenido:string;detalle:string;estado:string}>>({})
   const [nhMap, setNhMap] = useState<Record<string,{clienteContraparte:string;total:string;pagado:string;estado:string;observaciones:string}>>({})
-  const [loading, setLoading] = useState(true)
-  const [filtroTipos, setFiltroTipos] = useState<string[]>([])
-  const [filtroEstados, setFiltroEstados] = useState<string[]>([])
-  const [editId, setEditId] = useState<string|null>(null)
-  const [editTexto, setEditTexto] = useState("")
-  const [editFecha, setEditFecha] = useState("")
+  const [ncMap, setNcMap] = useState<Record<string,{apellido:string;nombre:string;dni:string;correo:string;telefono:string;domicilio:string}>>({})
+  const [ntaMap, setNtaMap] = useState<Record<string,{texto:string;fecha:string;urgente:boolean}>>({}) // tareas de asuntos
+
+  // Edición inline de tareas
+  const [editId, setEditId]         = useState<string|null>(null)
+  const [editTexto, setEditTexto]   = useState("")
+  const [editFecha, setEditFecha]   = useState("")
   const [editUrgente, setEditUrgente] = useState(false)
-  const [mostrarConc, setMostrarConc] = useState<Record<string,boolean>>({})
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editandoJuicio, setEditandoJuicio] = useState<Juicio|null>(null)
-  const [form, setForm] = useState<JuicioForm>(FORM_VACIO)
-  const [saving, setSaving] = useState(false)
-  const [vistaCongelada, setVistaCongelada] = useState<Tarea[]>([])
-  const [cambios, setCambios] = useState<Record<string,Partial<Tarea>>>({})
-  const [panelDerechoVisible, setPanelDerechoVisible] = useState(true)
-  const [juicioSeleccionado, setJuicioSeleccionado] = useState<string|null>(null)
+
+  // Posponer
   const [posponerOpen, setPosponerOpen] = useState<string|null>(null)
   const [posponerFecha, setPosponerFecha] = useState("")
+
+  // Mostrar concluidas dentro de juicio
+  const [mostrarConc, setMostrarConc] = useState<Record<string,boolean>>({})
+
+  // Filtros
+  const [filtroTipos, setFiltroTipos]     = useState<string[]>([])
+  const [filtroEstados, setFiltroEstados] = useState<string[]>([])
+
+  // Panel derecho (tareas)
+  const [panelDerechoVisible, setPanelDerechoVisible] = useState(true)
+  const [juicioSeleccionado, setJuicioSeleccionado]   = useState<string|null>(null)
+
+  // Barra lateral juicios (estadísticas)
+  const [statsVisible, setStatsVisible] = useState(true)
+
+  // Modal juicio
+  const [modalJuicioOpen, setModalJuicioOpen]       = useState(false)
+  const [editandoJuicio, setEditandoJuicio]          = useState<Juicio|null>(null)
+  const [formJuicio, setFormJuicio]                  = useState<JuicioForm>(FORM_JUICIO_VACIO)
+  const [saving, setSaving]                          = useState(false)
+
+  // Modal asunto
+  const [modalAsuntoOpen, setModalAsuntoOpen]   = useState(false)
+  const [editandoAsunto, setEditandoAsunto]     = useState<Asunto|null>(null)
+  const [formAsunto, setFormAsunto]             = useState<AsuntoForm>(FORM_ASUNTO_VACIO)
+
+  // Búsqueda de clientes existentes
+  const [clienteBusqueda, setClienteBusqueda]   = useState<Record<string,string>>({})
+  const [clienteSugerencias, setClienteSugerencias] = useState<Record<string,ClienteJuicio[]>>({})
+
+  // Nueva tarea personal
+  const [ntPersonal, setNtPersonal] = useState({texto:"",fecha:"",urgente:false})
 
   useEffect(() => {
     if (expandido) {
       setTimeout(() => {
-        const el = document.getElementById(`juicio-${expandido}`)
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+        const el = document.getElementById(`item-${expandido}`)
+        if (el) el.scrollIntoView({ behavior:"smooth", block:"start" })
       }, 80)
     }
   }, [expandido])
 
   useEffect(() => {
     if (session && loading) {
-      Promise.all([fetch("/api/juicios").then(r=>r.json()), fetch("/api/tareas").then(r=>r.json())])
-        .then(([j,t]) => {
-          setJuicios(Array.isArray(j)?j:[])
-          const ts = Array.isArray(t)?t:[]
-          setTareas(ts)
-          setVistaCongelada(ts.filter(x=>!x.done))
-          setLoading(false)
-        })
-        .catch(()=>setLoading(false))
+      Promise.all([
+        fetch("/api/juicios").then(r=>r.json()),
+        fetch("/api/tareas").then(r=>r.json()),
+        fetch("/api/asuntos").then(r=>r.json()).catch(()=>[]),
+      ]).then(([j,t,a]) => {
+        const js = Array.isArray(j)?j:[]
+        const ts = Array.isArray(t)?t:[]
+        const as_ = Array.isArray(a)?a:[]
+        setJuicios(js)
+        setAsuntos(as_)
+        setTareas(ts)
+        setVistaCongelada(ts.filter(x=>!x.done))
+        setLoading(false)
+      }).catch(()=>setLoading(false))
     }
   }, [session])
 
@@ -82,47 +138,48 @@ export default function Home() {
     </div></div>
   )
 
-  const hoy = new Date(); hoy.setHours(0,0,0,0)
+  // ─── CÁLCULOS BASE ───────────────────────────────────────────────────────────
+  const hoy = hoyDate()
   const inactivosSet = new Set(juicios.filter(j=>INACTIVOS.includes(j.estado)).map(j=>j.id))
   const tareasActivas = tareas.filter(t=>!t.done && !(t.juicioId&&inactivosSet.has(t.juicioId)))
-  const esAtrasada = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha)<hoy }
-  const esHoy = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha).getTime()===hoy.getTime() }
-  const esProxima = (t:Tarea) => !esAtrasada(t)&&!esHoy(t)
 
+  const esAtrasada = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha)<hoy }
+  const esHoy_     = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha).getTime()===hoy.getTime() }
+  const esProxima  = (t:Tarea) => !esAtrasada(t)&&!esHoy_(t)
+
+  // Vista congelada con cambios aplicados visualmente
   const vistaActual = vistaCongelada
     .filter(t=>!(t.juicioId&&inactivosSet.has(t.juicioId)))
     .map(t=>({...t,...(cambios[t.id]||{})}))
-  const urgentesArriba = vistaActual.filter(t=>t.urgente&&(esAtrasada(t)||esHoy(t)))
-  const atrasadas = vistaActual.filter(t=>esAtrasada(t)&&!urgentesArriba.find(u=>u.id===t.id))
-  const vencenHoy = vistaActual.filter(t=>esHoy(t)&&!urgentesArriba.find(u=>u.id===t.id))
-  const proximas = vistaActual.filter(t=>esProxima(t)&&!urgentesArriba.find(u=>u.id===t.id))
-  const hayPendientes = Object.keys(cambios).length > 0
 
-  const abrirNuevo = () => { setEditandoJuicio(null); setForm(FORM_VACIO); setModalOpen(true) }
-  const abrirEditar = (j:Juicio, e:React.MouseEvent) => {
-    e.stopPropagation()
-    setEditandoJuicio(j)
-    setForm({ autos:j.autos||"", estado:j.estado||"Judicializado", nro:j.nro||"", fuero:j.fuero||"", juzgado:j.juzgado||"", secretaria:j.secretaria||"", sala:j.sala||"", advertencia:j.advertencia||"", cosasRelevantes:j.cosasRelevantes||"", datosJuzgado:j.datosJuzgado||"", datosContacto:j.datosContacto||"", otraInfo:j.otraInfo||"", driveUrl:j.driveUrl||"", iaUrl:j.iaUrl||"" })
-    setModalOpen(true)
-  }
+  const urgentesArriba = vistaActual.filter(t=>!t.done&&t.urgente)
+  const atrasadas      = vistaActual.filter(t=>!t.done&&esAtrasada(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const vencenHoy      = vistaActual.filter(t=>!t.done&&esHoy_(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const proximas       = vistaActual.filter(t=>!t.done&&esProxima(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const hayPendientes  = Object.keys(cambios).length > 0
 
-  const guardarJuicio = async () => {
-    if (!form.autos.trim()) { alert("El nombre del juicio es obligatorio"); return }
-    setSaving(true)
-    try {
-      if (editandoJuicio) {
-        await fetch("/api/juicios",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:editandoJuicio.id,...form})})
-        setJuicios(js=>js.map(j=>j.id===editandoJuicio.id?{...j,...form}:j))
-      } else {
-        const res = await fetch("/api/juicios",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(form)})
-        const nuevo = await res.json()
-        setJuicios(js=>[{...nuevo,tareas:[],pruebas:[],honorarios:[]},...js])
-      }
-      setModalOpen(false)
-    } catch { alert("Error al guardar") }
-    setSaving(false)
-  }
+  const tareasFiltradas = vistaActual
+    .filter(t=>!t.done&&(filtroTipos.length===0||filtroTipos.includes(t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios")))
+    .sort((a,b)=>{
+      if(a.urgente&&!b.urgente)return -1; if(!a.urgente&&b.urgente)return 1
+      if(!a.fecha&&!b.fecha)return 0; if(!a.fecha)return 1; if(!b.fecha)return -1
+      return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()
+    })
 
+  const juiciosFiltrados = juicios
+    .filter(j=>filtroEstados.length===0?!INACTIVOS.includes(j.estado):filtroEstados.includes(j.estado))
+    .sort((a,b)=>a.autos.localeCompare(b.autos,"es"))
+
+  const honorariosPendientes = juicios.flatMap(j=>
+    (j.honorarios||[]).filter(h=>h.estado!=="Pago total").map(h=>({...h,autos:j.autos}))
+  )
+
+  // Todos los clientes cargados en cualquier juicio (para autocompletar)
+  const todosClientes: ClienteJuicio[] = juicios.flatMap(j=>j.clientes||[])
+
+  // ─── ACCIONES TAREAS (sin "Actualizar vista" — van directo a API y cambios) ──
+  // NOTA: toggleDone, posponer y toggleUrgente guardan en cambios[] PERO también
+  // persisten en la API inmediatamente. La vista no se reordena hasta "Actualizar".
   const toggleDone = (t:Tarea) => {
     const doneActual = cambios[t.id]?.done ?? t.done
     if (!doneActual && t.juicioId) {
@@ -133,27 +190,10 @@ export default function Home() {
       }
     }
     const nuevoDone = !doneActual
-    setTareas(ts=>ts.map(x=>x.id===t.id?{...x,done:nuevoDone}:x))
-    setVistaCongelada(vs=>vs.map(x=>x.id===t.id?{...x,done:nuevoDone}:x))
-    setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,done:nuevoDone}:x)})))
-    setCambios(p=>({...p,[t.id]:{...p[t.id],done:nuevoDone}}))
+    // Persiste en API
     fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done:nuevoDone})})
-  }
-
-  const guardarEdicion = async (t:Tarea) => {
-    await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,texto:editTexto,urgente:editUrgente,fecha:editFecha||null})})
-    setCambios(p=>({...p,[t.id]:{...p[t.id],texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}}))
-    setVistaCongelada(vs=>vs.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||x.fecha}:x))
-    setEditId(null)
-  }
-
-  const posponer = async (t:Tarea) => {
-    if (!posponerFecha) return
-    await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,fecha:posponerFecha})})
-    setCambios(p=>({...p,[t.id]:{...p[t.id],fecha:posponerFecha}}))
-    setVistaCongelada(vs=>vs.map(x=>x.id===t.id?{...x,fecha:posponerFecha}:x))
-    setPosponerOpen(null)
-    setPosponerFecha("")
+    // Solo registra en cambios — NO reordena vistaCongelada
+    setCambios(p=>({...p,[t.id]:{...p[t.id],done:nuevoDone}}))
   }
 
   const toggleUrgente = (t:Tarea) => {
@@ -162,12 +202,26 @@ export default function Home() {
     setCambios(p=>({...p,[t.id]:{...p[t.id],urgente:nuevoUrgente}}))
   }
 
+  const posponer = (t:Tarea) => {
+    if (!posponerFecha) return
+    fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,fecha:posponerFecha})})
+    setCambios(p=>({...p,[t.id]:{...p[t.id],fecha:posponerFecha}}))
+    setPosponerOpen(null); setPosponerFecha("")
+  }
+
+  const guardarEdicion = (t:Tarea) => {
+    fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,texto:editTexto,urgente:editUrgente,fecha:editFecha||null})})
+    setCambios(p=>({...p,[t.id]:{...p[t.id],texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}}))
+    setEditId(null)
+  }
+
+  // Actualizar vista: reordena y limpia cambios
   const actualizarVista = () => {
     const nuevasTareas = tareas.map(t=>cambios[t.id]?{...t,...cambios[t.id]}:t)
     setTareas(nuevasTareas)
     setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(t=>cambios[t.id]?{...t,...cambios[t.id]}:t)})))
     const nuevaVista = nuevasTareas
-      .filter(t=>!t.done && !(t.juicioId&&inactivosSet.has(t.juicioId)))
+      .filter(t=>!t.done&&!(t.juicioId&&inactivosSet.has(t.juicioId)))
       .sort((a,b)=>{
         if(a.urgente&&!b.urgente)return -1; if(!a.urgente&&b.urgente)return 1
         if(!a.fecha&&!b.fecha)return 0; if(!a.fecha)return 1; if(!b.fecha)return -1
@@ -177,7 +231,76 @@ export default function Home() {
     setCambios({})
   }
 
-  const agregarTarea = async (juicioId:string) => {
+  // ─── ACCIONES JUICIOS ────────────────────────────────────────────────────────
+  const abrirNuevoJuicio = () => { setEditandoJuicio(null); setFormJuicio(FORM_JUICIO_VACIO); setModalJuicioOpen(true) }
+  const abrirEditarJuicio = (j:Juicio, e:React.MouseEvent) => {
+    e.stopPropagation()
+    setEditandoJuicio(j)
+    setFormJuicio({ autos:j.autos||"", estado:j.estado||"Judicializado", nro:j.nro||"", fuero:j.fuero||"", juzgado:j.juzgado||"", secretaria:j.secretaria||"", sala:j.sala||"", advertencia:j.advertencia||"", datosJuzgado:j.datosJuzgado||"", otraInfo:j.otraInfo||"", driveUrl:j.driveUrl||"", iaUrl:j.iaUrl||"", pjnUrl:(j as any).pjnUrl||"" })
+    setModalJuicioOpen(true)
+  }
+
+  const guardarJuicio = async () => {
+    if (!formJuicio.autos.trim()) { alert("El nombre del juicio es obligatorio"); return }
+    setSaving(true)
+    try {
+      if (editandoJuicio) {
+        await fetch("/api/juicios",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:editandoJuicio.id,...formJuicio})})
+        setJuicios(js=>js.map(j=>j.id===editandoJuicio.id?{...j,...formJuicio}:j))
+      } else {
+        const res = await fetch("/api/juicios",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(formJuicio)})
+        const nuevo = await res.json()
+        setJuicios(js=>[{...nuevo,tareas:[],pruebas:[],honorarios:[],clientes:[]},...js])
+      }
+      setModalJuicioOpen(false)
+    } catch { alert("Error al guardar") }
+    setSaving(false)
+  }
+
+  const eliminarJuicio = async (j:Juicio, e:React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm(`¿Eliminar "${j.autos}"?`)) return
+    if (!confirm("Confirmación final: se eliminarán todas las tareas, pruebas y honorarios asociados. ¿Continuar?")) return
+    await fetch("/api/juicios",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:j.id})})
+    setJuicios(js=>js.filter(x=>x.id!==j.id))
+  }
+
+  // ─── ACCIONES ASUNTOS ────────────────────────────────────────────────────────
+  const abrirNuevoAsunto = (tipo:string) => { setEditandoAsunto(null); setFormAsunto({...FORM_ASUNTO_VACIO,tipo}); setModalAsuntoOpen(true) }
+  const abrirEditarAsunto = (a:Asunto, e:React.MouseEvent) => {
+    e.stopPropagation()
+    setEditandoAsunto(a)
+    setFormAsunto({ nombre:a.nombre||"", tipo:a.tipo||"probono", estado:a.estado||"Abierta", advertencia:a.advertencia||"", otraInfo:a.otraInfo||"", driveUrl:a.driveUrl||"", webUrl:a.webUrl||"" })
+    setModalAsuntoOpen(true)
+  }
+
+  const guardarAsunto = async () => {
+    if (!formAsunto.nombre.trim()) { alert("El nombre es obligatorio"); return }
+    setSaving(true)
+    try {
+      if (editandoAsunto) {
+        await fetch("/api/asuntos",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:editandoAsunto.id,...formAsunto})})
+        setAsuntos(as=>as.map(a=>a.id===editandoAsunto.id?{...a,...formAsunto}:a))
+      } else {
+        const res = await fetch("/api/asuntos",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(formAsunto)})
+        const nuevo = await res.json()
+        setAsuntos(as=>[{...nuevo,tareas:[]},...as])
+      }
+      setModalAsuntoOpen(false)
+    } catch { alert("Error al guardar") }
+    setSaving(false)
+  }
+
+  const eliminarAsunto = async (a:Asunto, e:React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm(`¿Eliminar "${a.nombre}"?`)) return
+    if (!confirm("Confirmación final: se eliminarán todas las tareas asociadas. ¿Continuar?")) return
+    await fetch("/api/asuntos",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:a.id})})
+    setAsuntos(as=>as.filter(x=>x.id!==a.id))
+  }
+
+  // ─── ACCIONES TAREAS DE JUICIO ───────────────────────────────────────────────
+  const agregarTareaJuicio = async (juicioId:string) => {
     const nt = ntMap[juicioId]||{texto:"",fecha:"",urgente:false}
     if (!nt.texto.trim()) return
     const body:any={texto:nt.texto,juicioId,urgente:nt.urgente,tipo:"Juicio"}
@@ -190,6 +313,34 @@ export default function Home() {
     setNtMap(p=>({...p,[juicioId]:{texto:"",fecha:"",urgente:false}}))
   }
 
+  // ─── ACCIONES TAREAS DE ASUNTO ───────────────────────────────────────────────
+  const agregarTareaAsunto = async (asuntoId:string, tipo:string) => {
+    const nt = ntaMap[asuntoId]||{texto:"",fecha:"",urgente:false}
+    if (!nt.texto.trim()) return
+    const body:any={texto:nt.texto,asuntoId,urgente:nt.urgente,tipo}
+    if(nt.fecha) body.fecha=nt.fecha
+    const res = await fetch("/api/tareas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    if(!res.ok){alert("Error al agregar tarea");return}
+    const t = await res.json()
+    setAsuntos(as=>as.map(a=>a.id===asuntoId?{...a,tareas:[...a.tareas,t]}:a))
+    setTareas(ts=>[...ts,t])
+    setNtaMap(p=>({...p,[asuntoId]:{texto:"",fecha:"",urgente:false}}))
+  }
+
+  // ─── TAREAS PERSONALES ───────────────────────────────────────────────────────
+  const agregarTareaPersonal = async () => {
+    if (!ntPersonal.texto.trim()) return
+    const body:any={texto:ntPersonal.texto,urgente:ntPersonal.urgente,tipo:"Personales"}
+    if(ntPersonal.fecha) body.fecha=ntPersonal.fecha
+    const res = await fetch("/api/tareas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    if(!res.ok){alert("Error al agregar tarea");return}
+    const t = await res.json()
+    setTareas(ts=>[...ts,t])
+    setVistaCongelada(vs=>[...vs,t])
+    setNtPersonal({texto:"",fecha:"",urgente:false})
+  }
+
+  // ─── PRUEBAS ─────────────────────────────────────────────────────────────────
   const agregarPrueba = async (juicioId:string) => {
     const np = npMap[juicioId]||{tipo:"",contenido:"",detalle:"",estado:"Ofrecida"}
     if(!np.tipo) return
@@ -200,58 +351,99 @@ export default function Home() {
     setNpMap(p2=>({...p2,[juicioId]:{tipo:"",contenido:"",detalle:"",estado:"Ofrecida"}}))
   }
 
+  const borrarPrueba = async (juicioId:string,pruebaId:string) => {
+    await fetch("/api/pruebas",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:pruebaId})})
+    setJuicios(js=>js.map(j=>j.id===juicioId?{...j,pruebas:j.pruebas.filter(p=>p.id!==pruebaId)}:j))
+  }
+
+  // ─── HONORARIOS ──────────────────────────────────────────────────────────────
   const agregarHonorario = async (juicioId:string) => {
     const nh = nhMap[juicioId]||{clienteContraparte:"",total:"",pagado:"",estado:"Pendiente",observaciones:""}
     if(!nh.clienteContraparte.trim()) return
-    const res = await fetch("/api/honorarios",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({clienteContraparte:nh.clienteContraparte,total:nh.total,pagado:nh.pagado,estado:nh.estado,observaciones:nh.observaciones,juicioId})})
+    const res = await fetch("/api/honorarios",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...nh,juicioId})})
     if(!res.ok){alert("Error al agregar honorario");return}
     const h = await res.json()
     setJuicios(js=>js.map(j=>j.id===juicioId?{...j,honorarios:[...(j.honorarios||[]),h]}:j))
     setNhMap(p=>({...p,[juicioId]:{clienteContraparte:"",total:"",pagado:"",estado:"Pendiente",observaciones:""}}))
   }
 
-  const borrarPrueba = async (juicioId:string,pruebaId:string) => {
-    await fetch("/api/pruebas",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:pruebaId})})
-    setJuicios(js=>js.map(j=>j.id===juicioId?{...j,pruebas:j.pruebas.filter(p=>p.id!==pruebaId)}:j))
+  // ─── CLIENTES ────────────────────────────────────────────────────────────────
+  const agregarCliente = async (juicioId:string) => {
+    const nc = ncMap[juicioId]||{apellido:"",nombre:"",dni:"",correo:"",telefono:"",domicilio:""}
+    if(!nc.apellido.trim()) return
+    const res = await fetch("/api/clientes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...nc,juicioId})})
+    if(!res.ok){alert("Error al agregar cliente");return}
+    const c = await res.json()
+    setJuicios(js=>js.map(j=>j.id===juicioId?{...j,clientes:[...(j.clientes||[]),c]}:j))
+    setNcMap(p=>({...p,[juicioId]:{apellido:"",nombre:"",dni:"",correo:"",telefono:"",domicilio:""}}))
+    setClienteBusqueda(p=>({...p,[juicioId]:""}))
+    setClienteSugerencias(p=>({...p,[juicioId]:[]}))
   }
 
-  const juicioPanel = juicioSeleccionado ? juicios.find(j=>j.id===juicioSeleccionado) : null
+  const borrarCliente = async (juicioId:string, clienteId:string) => {
+    await fetch("/api/clientes",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:clienteId})})
+    setJuicios(js=>js.map(j=>j.id===juicioId?{...j,clientes:(j.clientes||[]).filter(c=>c.id!==clienteId)}:j))
+  }
 
-  const renderTareaNuevo = (t:Tarea) => {
-    const isDone = cambios[t.id]?.done ?? t.done
-    const urgente = cambios[t.id]?.urgente ?? t.urgente
-    const fecha = cambios[t.id]?.fecha ?? t.fecha
-    const texto = cambios[t.id]?.texto ?? t.texto
-    const isEdit = editId===t.id
-    const tipo = t.tipo||"Juicio"
-    const franjaColor = FRANJA_COLOR[tipo]||"#378ADD"
-    const bgColor = isDone?"#f9f9f8":urgente?"#FFF0F0":esAtrasada({...t,fecha})?"#F5F0FF":"#fff"
-    const borderColor = isDone?"#e5e7eb":urgente?"#E24B4A":esAtrasada({...t,fecha})?"#C9A8F0":"#e5e7eb"
+  const buscarClientes = (juicioId:string, q:string) => {
+    setClienteBusqueda(p=>({...p,[juicioId]:q}))
+    if(q.length<2){setClienteSugerencias(p=>({...p,[juicioId]:[]}));return}
+    const ql=q.toLowerCase()
+    const sugs = todosClientes.filter(c=>(c.apellido+c.nombre).toLowerCase().includes(ql)).slice(0,5)
+    setClienteSugerencias(p=>({...p,[juicioId]:sugs}))
+  }
+
+  const seleccionarClienteSugerencia = (juicioId:string, c:ClienteJuicio) => {
+    setNcMap(p=>({...p,[juicioId]:{apellido:c.apellido,nombre:c.nombre,dni:c.dni||"",correo:c.correo||"",telefono:c.telefono||"",domicilio:c.domicilio||""}}))
+    setClienteBusqueda(p=>({...p,[juicioId]:""}))
+    setClienteSugerencias(p=>({...p,[juicioId]:[]}))
+  }
+
+  // ─── BACKUP ──────────────────────────────────────────────────────────────────
+  const descargarBackup = async () => {
+    try {
+      const res = await fetch("/api/backup")
+      if(!res.ok){alert("Error al generar backup");return}
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href=url; a.download=`backup-agenda-legal-${new Date().toISOString().split("T")[0]}.xlsx`
+      a.click(); URL.revokeObjectURL(url)
+    } catch { alert("Error al descargar backup") }
+  }
+
+  // ─── RENDER: TAREA (panel tareas) ────────────────────────────────────────────
+  const renderTarea = (t:Tarea) => {
+    const isDone   = cambios[t.id]?.done    ?? t.done
+    const urgente  = cambios[t.id]?.urgente ?? t.urgente
+    const fecha    = cambios[t.id]?.fecha   ?? t.fecha
+    const texto    = cambios[t.id]?.texto   ?? t.texto
+    const isEdit   = editId===t.id
+    const tipoLabel = t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios"
+    const franja   = FRANJA[tipoLabel]||"#378ADD"
+    const bgColor  = isDone?"#f9f9f8":urgente?"#FFF0F0":esAtrasada({...t,fecha})?"#F5F0FF":"#fff"
+    const bdrColor = isDone?"#e5e7eb":urgente?"#E24B4A":esAtrasada({...t,fecha})?"#C9A8F0":"#e5e7eb"
     const juicioInfo = t.juicioId ? juicios.find(j=>j.id===t.juicioId) : null
-    const driveUrl = juicioInfo?.driveUrl
-    const nroExpte = juicioInfo?.nro && juicioInfo.nro!=="Iniciar" ? juicioInfo.nro : null
-
+    const driveUrl   = juicioInfo?.driveUrl
+    const pjnUrl     = (juicioInfo as any)?.pjnUrl || (juicioInfo?.nro&&juicioInfo.nro!=="Iniciar"?"https://scw.pjn.gov.ar/scw/home.seam":null)
     return (
       <div key={t.id}
-        style={{display:"flex",width:"100%",background:bgColor,border:`0.5px solid ${borderColor}`,borderRadius:10,marginBottom:6,overflow:"visible",opacity:isDone?0.65:1,cursor:"default"}}
+        style={{display:"flex",width:"100%",background:bgColor,border:`0.5px solid ${bdrColor}`,borderRadius:10,marginBottom:6,overflow:"visible",opacity:isDone?0.65:1,cursor:"default",boxSizing:"border-box"}}
         onClick={e=>{
-          const target = e.target as HTMLElement
-          if(target.closest("button")||target.closest("a")||target.closest(".check-box")||target.closest(".caratula")) return
-          if(t.juicioId){ setJuicioSeleccionado(t.juicioId); if(!panelDerechoVisible) setPanelDerechoVisible(true) }
+          const tg=e.target as HTMLElement
+          if(tg.closest("button")||tg.closest("a")||tg.closest(".check-box")||tg.closest(".caratula"))return
+          if(t.juicioId){setJuicioSeleccionado(t.juicioId);if(!panelDerechoVisible)setPanelDerechoVisible(true)}
         }}
       >
-        <div style={{width:5,flexShrink:0,background:franjaColor}}/>
+        <div style={{width:5,flexShrink:0,background:franja,borderRadius:"10px 0 0 10px"}}/>
         <div style={{flex:1,padding:"11px 13px",minWidth:0}}>
           <div style={{display:"flex",alignItems:"flex-start",gap:9}}>
-            <div className="check-box"
-              style={{...S.check,...(isDone?S.checkDone:{})}}
-              onClick={e=>{e.stopPropagation();toggleDone(t)}}
-            >{isDone?"✓":""}</div>
+            <div className="check-box" style={{...S.check,...(isDone?S.checkDone:{})}} onClick={e=>{e.stopPropagation();toggleDone(t)}}>{isDone?"✓":""}</div>
             <div style={{flex:1,minWidth:0}}>
               <span className="caratula"
-                style={{fontSize:14,fontWeight:600,color:isDone?"#aaa":"#185FA5",cursor:"pointer",lineHeight:1.4,textDecoration:isDone?"line-through":"none"}}
+                style={{fontSize:14,fontWeight:600,color:isDone?"#aaa":franja,cursor:"pointer",lineHeight:1.4,textDecoration:isDone?"line-through":"none"}}
                 onClick={e=>{e.stopPropagation();if(t.juicioId){setPanel("juicios");setExpandido(t.juicioId);setTabActiva(p=>({...p,[t.juicioId!]:"tareas"}))}}}
-              >{t.juicio?.autos||t.tema||tipo}</span>
+              >{t.juicio?.autos||t.tema||tipoLabel}</span>
               {isEdit?(
                 <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:6}}>
                   <input style={{...S.input,fontSize:13}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
@@ -273,9 +465,9 @@ export default function Home() {
             )}
           </div>
           {!isEdit&&(
-            <div style={{display:"flex",alignItems:"center",gap:7,marginTop:9,paddingTop:8,borderTop:"0.5px solid #e5e7eb",flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginTop:9,paddingTop:8,borderTop:"0.5px solid #ebebeb",flexWrap:"wrap"}}>
               {driveUrl&&<a href={driveUrl} target="_blank" rel="noopener noreferrer" style={S.linkDrive} onClick={e=>e.stopPropagation()}>📁 Drive</a>}
-              {nroExpte&&<a href="https://scw.pjn.gov.ar/scw/home.seam" target="_blank" rel="noopener noreferrer" style={S.linkPjn} onClick={e=>e.stopPropagation()}>⚖ PJN</a>}
+              {pjnUrl&&<a href={pjnUrl} target="_blank" rel="noopener noreferrer" style={S.linkPjn} onClick={e=>e.stopPropagation()}>⚖ PJN</a>}
               {fecha&&<span style={{fontSize:12,color:"#555",fontWeight:500,whiteSpace:"nowrap",marginLeft:"auto"}}>{formatFecha(fecha)}</span>}
               {!isDone&&(
                 <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
@@ -288,7 +480,7 @@ export default function Home() {
                   )}
                 </div>
               )}
-              {!isDone&&<button style={S.btnUrgente} onClick={e=>{e.stopPropagation();toggleUrgente(t)}}>! urgente</button>}
+              {!isDone&&<button style={{...S.btnUrgente,...(urgente?{background:"#E24B4A",color:"#fff"}:{})}} onClick={e=>{e.stopPropagation();toggleUrgente(t)}}>! urgente</button>}
             </div>
           )}
         </div>
@@ -297,24 +489,26 @@ export default function Home() {
   }
 
   const seccion = (label:string, items:Tarea[], color?:string) => {
-    if(items.length===0) return null
+    if(items.length===0)return null
     return (
       <div key={label}>
         <div style={{...S.sectionLabel,color:color||"#888"}}>{label}</div>
-        {items.map(t=>renderTareaNuevo(t))}
+        {items.map(t=>renderTarea(t))}
       </div>
     )
   }
 
+  // ─── RENDER: PANEL DERECHO ────────────────────────────────────────────────────
+  const juicioPanel = juicioSeleccionado ? juicios.find(j=>j.id===juicioSeleccionado) : null
   const renderPanelDerecho = () => {
     if (!juicioPanel) return (
       <div style={{padding:"18px 16px"}}>
         <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em",marginBottom:14}}>RESUMEN</div>
         {[
-          {num:tareasActivas.filter(t=>esHoy(t)).length,label:"Vencen hoy",color:"#378ADD"},
-          {num:tareasActivas.filter(t=>t.urgente).length,label:"Urgentes",color:"#E24B4A"},
-          {num:tareasActivas.filter(t=>esAtrasada(t)).length,label:"Atrasadas",color:"#9B59B6"},
-          {num:tareasActivas.length,label:"Total activas",color:"#111"},
+          {num:tareasActivas.filter(t=>esHoy_(t)).length, label:"Vencen hoy",  color:"#378ADD"},
+          {num:tareasActivas.filter(t=>t.urgente).length, label:"Urgentes",    color:"#E24B4A"},
+          {num:tareasActivas.filter(t=>esAtrasada(t)).length, label:"Atrasadas",color:"#9B59B6"},
+          {num:tareasActivas.length,                       label:"Total activas",color:"#111"},
         ].map(m=>(
           <div key={m.label} style={{background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:10,padding:"14px 16px",marginBottom:8}}>
             <div style={{fontSize:28,fontWeight:500,color:m.color}}>{m.num}</div>
@@ -326,24 +520,23 @@ export default function Home() {
     const otrasTareas = juicioPanel.tareas.filter(t=>!t.done)
     return (
       <div style={{padding:"18px 16px"}}>
-        <span style={{fontSize:11,color:"#aaa",cursor:"pointer",marginBottom:12,display:"inline-block"}} onClick={()=>setJuicioSeleccionado(null)}>← volver al resumen</span>
-        <div style={{fontSize:11,padding:"3px 10px",borderRadius:10,background:ESTADOS[juicioPanel.estado]||"#F1EFE8",color:ESTADOS_TEXT[juicioPanel.estado]||"#444",display:"inline-block",marginBottom:12,marginLeft:8}}>{juicioPanel.estado}</div>
-        <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:10,lineHeight:1.4}}>{juicioPanel.autos}</div>
-        {juicioPanel.advertencia&&<div style={{fontSize:12,color:"#A32D2D",background:"#fff5f5",border:"0.5px solid #f5c5c5",borderRadius:6,padding:"6px 10px",marginBottom:12}}>⚠ {juicioPanel.advertencia}</div>}
-        {juicioPanel.nro&&<div style={{marginBottom:10}}><div style={S.fieldLabel}>EXPEDIENTE</div><div style={{fontSize:13}}>{juicioPanel.nro}</div></div>}
-        {juicioPanel.fuero&&<div style={{marginBottom:10}}><div style={S.fieldLabel}>FUERO</div><div style={{fontSize:13}}>{juicioPanel.fuero}</div></div>}
-        {juicioPanel.juzgado&&<div style={{marginBottom:10}}><div style={S.fieldLabel}>JUZGADO / SECRETARÍA</div><div style={{fontSize:13}}>Juz. {parseInt(juicioPanel.juzgado)||juicioPanel.juzgado}{juicioPanel.secretaria?` · Sec. ${juicioPanel.secretaria}`:""}</div></div>}
-        {juicioPanel.cosasRelevantes&&<div style={{marginBottom:10}}><div style={S.fieldLabel}>NOTAS</div><div style={{fontSize:12,color:"#444"}}>{juicioPanel.cosasRelevantes}</div></div>}
-        <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:14}}>
-          {juicioPanel.driveUrl&&<a href={juicioPanel.driveUrl} target="_blank" rel="noopener noreferrer" style={S.pjLink}>📁 Abrir carpeta en Drive</a>}
-          {juicioPanel.nro&&juicioPanel.nro!=="Iniciar"&&<a href="https://scw.pjn.gov.ar/scw/home.seam" target="_blank" rel="noopener noreferrer" style={{...S.pjLink,color:"#185FA5",borderColor:"#b5d4f4",background:"#E6F1FB"}}>⚖ Ver expediente en PJN</a>}
-          {juicioPanel.iaUrl&&<a href={juicioPanel.iaUrl} target="_blank" rel="noopener noreferrer" style={{...S.pjLink,color:"#7B3F9E",borderColor:"#d5b5f5",background:"#f5eeff"}}>🤖 Proyecto IA</a>}
+        <span style={{fontSize:11,color:"#aaa",cursor:"pointer",marginBottom:12,display:"inline-block"}} onClick={()=>setJuicioSeleccionado(null)}>← volver</span>
+        <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:6,lineHeight:1.4}}>{juicioPanel.autos}</div>
+        <div style={{...S.badge,background:ESTADOS_BG[juicioPanel.estado]||"#F1EFE8",color:ESTADOS_TX[juicioPanel.estado]||"#444",display:"inline-block",marginBottom:10}}>{juicioPanel.estado}</div>
+        {juicioPanel.advertencia&&<div style={{fontSize:12,color:"#A32D2D",background:"#fff5f5",border:"0.5px solid #f5c5c5",borderRadius:6,padding:"6px 10px",marginBottom:10}}>⚠ {juicioPanel.advertencia}</div>}
+        {juicioPanel.nro&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>EXPEDIENTE</div><div style={{fontSize:13}}>{juicioPanel.nro}</div></div>}
+        {juicioPanel.fuero&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>FUERO</div><div style={{fontSize:13}}>{juicioPanel.fuero}</div></div>}
+        {juicioPanel.juzgado&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>JUZGADO</div><div style={{fontSize:13}}>Juz. {parseInt(juicioPanel.juzgado)||juicioPanel.juzgado}{juicioPanel.secretaria?` · Sec. ${juicioPanel.secretaria}`:""}</div></div>}
+        <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:12}}>
+          {juicioPanel.driveUrl&&<a href={juicioPanel.driveUrl} target="_blank" rel="noopener noreferrer" style={S.pjLink}>📁 Drive</a>}
+          {(juicioPanel as any).pjnUrl&&<a href={(juicioPanel as any).pjnUrl} target="_blank" rel="noopener noreferrer" style={{...S.pjLink,color:"#185FA5",borderColor:"#b5d4f4",background:"#E6F1FB"}}>⚖ PJN</a>}
+          {juicioPanel.iaUrl&&<a href={juicioPanel.iaUrl} target="_blank" rel="noopener noreferrer" style={{...S.pjLink,color:"#7B3F9E",borderColor:"#d5b5f5",background:"#f5eeff"}}>🤖 IA</a>}
         </div>
         {otrasTareas.length>0&&(
-          <div style={{marginTop:18,paddingTop:14,borderTop:"0.5px solid #e5e7eb"}}>
-            <div style={S.fieldLabel}>OTRAS TAREAS PENDIENTES</div>
+          <div style={{marginTop:14,paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
+            <div style={S.fieldLabel}>TAREAS PENDIENTES</div>
             {otrasTareas.map(t=>(
-              <div key={t.id} style={{fontSize:12,color:"#333",lineHeight:1.4,padding:"6px 0",borderBottom:"0.5px solid #f0f0f0"}}>{t.texto}{t.fecha?` · ${formatFecha(t.fecha)}`:""}</div>
+              <div key={t.id} style={{fontSize:12,color:"#333",padding:"5px 0",borderBottom:"0.5px solid #f0f0f0"}}>{t.texto}{t.fecha?` · ${formatFecha(t.fecha)}`:""}</div>
             ))}
           </div>
         )}
@@ -351,64 +544,101 @@ export default function Home() {
     )
   }
 
+  // ─── RENDER: JUICIO CARD ─────────────────────────────────────────────────────
   const renderJuicio = (j:Juicio) => {
-    const exp = expandido===j.id
-    const tab = tabActiva[j.id]||"tareas"
-    const nt = ntMap[j.id]||{texto:"",fecha:"",urgente:false}
-    const np = npMap[j.id]||{tipo:"",contenido:"",detalle:"",estado:"Ofrecida"}
-    const nh = nhMap[j.id]||{clienteContraparte:"",total:"",pagado:"",estado:"Pendiente",observaciones:""}
-    const activas = j.tareas.filter(t=>!t.done).sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
+    const exp      = expandido===j.id
+    const tab      = tabActiva[j.id]||"tareas"
+    const nt       = ntMap[j.id]||{texto:"",fecha:"",urgente:false}
+    const np       = npMap[j.id]||{tipo:"",contenido:"",detalle:"",estado:"Ofrecida"}
+    const nh       = nhMap[j.id]||{clienteContraparte:"",total:"",pagado:"",estado:"Pendiente",observaciones:""}
+    const nc       = ncMap[j.id]||{apellido:"",nombre:"",dni:"",correo:"",telefono:"",domicilio:""}
+    const activas  = j.tareas.filter(t=>!t.done).sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
     const concluidas = j.tareas.filter(t=>t.done).slice(-5)
+    const primerCliente = (j.clientes||[])[0]
+    const busq     = clienteBusqueda[j.id]||""
+    const sugs     = clienteSugerencias[j.id]||[]
+
     return (
-      <div key={j.id} id={`juicio-${j.id}`} style={{...S.card,borderColor:exp?"#378ADD":"#e5e7eb"}}>
+      <div key={j.id} id={`item-${j.id}`} style={{...S.card,borderColor:exp?"#378ADD":"#e5e7eb"}}>
         <div style={S.cardHeader} onClick={()=>{setExpandido(exp?null:j.id);if(!tabActiva[j.id])setTabActiva(p=>({...p,[j.id]:"tareas"}))}}>
           <div style={{flex:1}}>
             <div style={S.cardTitle}>{j.autos}</div>
-            <div style={S.cardMeta}>{j.nro&&j.nro!=="Iniciar"?`Expte. ${j.nro} · `:""}{j.fuero}{j.juzgado?` · Juz. ${parseInt(j.juzgado)||j.juzgado}`:""}</div>
+            <div style={S.cardMeta}>
+              {primerCliente?`${primerCliente.apellido}, ${primerCliente.nombre}`:`${j.nro&&j.nro!=="Iniciar"?`Expte. ${j.nro} · `:""}${j.fuero||""}${j.juzgado?` · Juz. ${parseInt(j.juzgado)||j.juzgado}`:""}`}
+            </div>
             {j.advertencia&&<div style={{fontSize:11,color:"#A32D2D",marginTop:3,fontWeight:500}}>⚠ {j.advertencia}</div>}
           </div>
           <div style={{display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
-            <span style={{...S.badge,background:ESTADOS[j.estado]||"#F1EFE8",color:ESTADOS_TEXT[j.estado]||"#444"}}>{j.estado}</span>
-            <button style={{...S.btnMini,fontSize:11}} onClick={e=>abrirEditar(j,e)}>✎</button>
+            <span style={{...S.badge,background:ESTADOS_BG[j.estado]||"#F1EFE8",color:ESTADOS_TX[j.estado]||"#444"}}>{j.estado}</span>
+            <button style={S.btnMini} onClick={e=>abrirEditarJuicio(j,e)} title="Editar">✎</button>
+            <button style={{...S.btnMini,color:"#E24B4A"}} onClick={e=>eliminarJuicio(j,e)} title="Eliminar">✕</button>
           </div>
         </div>
+
         {exp&&(
           <div style={{padding:"0 14px 14px"}} onClick={e=>e.stopPropagation()}>
+            {/* Links rápidos */}
             <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
               {j.driveUrl&&<a href={j.driveUrl} target="_blank" rel="noopener noreferrer" style={{...S.btnMini,textDecoration:"none",fontSize:11,color:"#4285F4"}}>📁 Drive</a>}
-              {j.nro&&j.nro!=="Iniciar"&&<a href="https://scw.pjn.gov.ar/scw/home.seam" target="_blank" rel="noopener noreferrer" style={{...S.btnMini,textDecoration:"none",fontSize:11,color:"#185FA5"}}>⚖ PJN</a>}
+              {(j as any).pjnUrl&&<a href={(j as any).pjnUrl} target="_blank" rel="noopener noreferrer" style={{...S.btnMini,textDecoration:"none",fontSize:11,color:"#185FA5"}}>⚖ PJN</a>}
               {j.iaUrl&&<a href={j.iaUrl} target="_blank" rel="noopener noreferrer" style={{...S.btnMini,textDecoration:"none",fontSize:11,color:"#7B3F9E"}}>🤖 IA</a>}
             </div>
+
+            {/* Tabs */}
             <div style={S.tabs}>
-              {["tareas","pruebas","honorarios","info"].map(t=>(
+              {["tareas","pruebas","honorarios","clientes"].map(t=>(
                 <div key={t} style={{...S.tab,...(tab===t?S.tabActive:{})}} onClick={()=>setTabActiva(p=>({...p,[j.id]:t}))}>
-                  {t==="tareas"?`Tareas (${activas.length})`:t==="pruebas"?`Prueba (${j.pruebas.length})`:t==="honorarios"?`Honorarios (${(j.honorarios||[]).length})`:"Info"}
+                  {t==="tareas"?`Tareas (${activas.length})`:t==="pruebas"?`Prueba (${j.pruebas.length})`:t==="honorarios"?`Honorarios (${(j.honorarios||[]).length})`:`Clientes (${(j.clientes||[]).length})`}
                 </div>
               ))}
             </div>
+
+            {/* ── Tab Tareas ── */}
             {tab==="tareas"&&(
               <div>
                 {activas.map(t=>(
-                  <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":"#fff",borderColor:t.urgente?"#E24B4A":"#e5e7eb",marginBottom:6}}>
+                  <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":esAtrasada(t)?"#F5F0FF":"#fff",borderColor:t.urgente?"#E24B4A":esAtrasada(t)?"#C9A8F0":"#e5e7eb",marginBottom:6}}>
                     <div style={S.cardHeader}>
                       <div style={{...S.check,...(t.done?S.checkDone:{})}} onClick={()=>toggleDone(t)}>{t.done?"✓":""}</div>
                       <div style={{flex:1,marginLeft:8,fontSize:13}}>{t.texto}</div>
-                      {t.urgente&&<span style={{fontSize:10,color:"#A32D2D",fontWeight:600,background:"#FCEBEB",padding:"1px 6px",borderRadius:8}}>URGENTE</span>}
+                      {t.urgente&&<span style={{fontSize:10,color:"#A32D2D",fontWeight:600,background:"#FCEBEB",padding:"1px 6px",borderRadius:8}}>URG</span>}
                       {t.fecha&&<span style={{fontSize:11,color:"#888",whiteSpace:"nowrap"}}>{formatFecha(t.fecha)}</span>}
                       <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}} onClick={()=>toggleUrgente(t)}>!</button>
                       <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente)}}>✎</button>
                     </div>
+                    {editId===t.id&&(
+                      <div style={{padding:"0 14px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
+                        <input style={{...S.input,flex:"3 1 180px"}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
+                        <input type="date" style={{...S.input,flex:"1 1 130px"}} value={editFecha} onChange={e=>setEditFecha(e.target.value)}/>
+                        <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente</label>
+                        <button style={S.btnPrimary} onClick={()=>guardarEdicion(t)}>Guardar</button>
+                        <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {activas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin tareas activas</div>}
                 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-                  <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva tarea..." value={nt.texto} onChange={e=>setNtMap(p=>({...p,[j.id]:{...nt,texto:e.target.value}}))} onKeyDown={e=>e.key==="Enter"&&agregarTarea(j.id)}/>
+                  <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva tarea..." value={nt.texto} onChange={e=>setNtMap(p=>({...p,[j.id]:{...nt,texto:e.target.value}}))} onKeyDown={e=>e.key==="Enter"&&agregarTareaJuicio(j.id)}/>
                   <input type="date" style={{...S.input,flex:"1 1 140px"}} value={nt.fecha} onChange={e=>setNtMap(p=>({...p,[j.id]:{...nt,fecha:e.target.value}}))}/>
-                  <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}>
-                    <input type="checkbox" checked={nt.urgente} onChange={e=>setNtMap(p=>({...p,[j.id]:{...nt,urgente:e.target.checked}}))}/> Urgente
-                  </label>
-                  <button style={S.btnPrimary} onClick={()=>agregarTarea(j.id)}>+ Agregar</button>
+                  <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={nt.urgente} onChange={e=>setNtMap(p=>({...p,[j.id]:{...nt,urgente:e.target.checked}}))}/> Urgente</label>
+                  <button style={S.btnPrimary} onClick={()=>agregarTareaJuicio(j.id)}>+ Agregar</button>
                 </div>
+
+                {/* Info del juicio debajo del form de tareas */}
+                <div style={{marginTop:16,paddingTop:14,borderTop:"0.5px solid #ebebeb"}}>
+                  <div style={S.fieldRow}>
+                    <div style={S.field}><div style={S.fieldLabel}>Expediente</div><div style={{fontSize:13}}>{j.nro||"—"}</div></div>
+                    <div style={S.field}><div style={S.fieldLabel}>Fuero</div><div style={{fontSize:13}}>{j.fuero||"—"}</div></div>
+                    <div style={S.field}><div style={S.fieldLabel}>Juzgado</div><div style={{fontSize:13}}>{j.juzgado?(parseInt(j.juzgado)||j.juzgado):"—"}</div></div>
+                    <div style={S.field}><div style={S.fieldLabel}>Secretaría</div><div style={{fontSize:13}}>{j.secretaria||"—"}</div></div>
+                    <div style={S.field}><div style={S.fieldLabel}>Sala</div><div style={{fontSize:13}}>{j.sala||"—"}</div></div>
+                  </div>
+                  {j.datosJuzgado&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Datos del juzgado</div><div style={{fontSize:13}}>{j.datosJuzgado}</div></div>}
+                  {j.otraInfo&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Otra información</div><div style={{fontSize:13}}>{j.otraInfo}</div></div>}
+                </div>
+
+                {/* Concluidas */}
                 {concluidas.length>0&&(
                   <div style={{marginTop:10}}>
                     <div style={{fontSize:12,color:"#888",cursor:"pointer",userSelect:"none",padding:"4px 0"}} onClick={()=>setMostrarConc(p=>({...p,[j.id]:!mostrarConc[j.id]}))}>
@@ -426,6 +656,8 @@ export default function Home() {
                 )}
               </div>
             )}
+
+            {/* ── Tab Pruebas ── */}
             {tab==="pruebas"&&(
               <div>
                 {j.pruebas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin pruebas cargadas</div>}
@@ -451,6 +683,8 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* ── Tab Honorarios ── */}
             {tab==="honorarios"&&(
               <div>
                 {(j.honorarios||[]).length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin honorarios cargados</div>}
@@ -468,29 +702,53 @@ export default function Home() {
                   <input style={{...S.input,flex:"2 1 160px"}} placeholder="Cliente / Contraparte *" value={nh.clienteContraparte} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,clienteContraparte:e.target.value}}))}/>
                   <input style={{...S.input,flex:"1 1 100px"}} placeholder="Total" value={nh.total} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,total:e.target.value}}))}/>
                   <input style={{...S.input,flex:"1 1 100px"}} placeholder="Pagado" value={nh.pagado} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,pagado:e.target.value}}))}/>
-                  <select style={{...S.input,flex:"1 1 120px"}} value={nh.estado} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,estado:e.target.value}}))}>
-                    {ESTADOS_HONORARIO.map(e=><option key={e}>{e}</option>)}
-                  </select>
+                  <select style={{...S.input,flex:"1 1 120px"}} value={nh.estado} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,estado:e.target.value}}))}>{ESTADOS_HON.map(e=><option key={e}>{e}</option>)}</select>
                   <input style={{...S.input,flex:"2 1 180px"}} placeholder="Observaciones" value={nh.observaciones} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,observaciones:e.target.value}}))}/>
                   <button style={S.btnPrimary} onClick={()=>agregarHonorario(j.id)}>+ Agregar</button>
                 </div>
               </div>
             )}
-            {tab==="info"&&(
+
+            {/* ── Tab Clientes ── */}
+            {tab==="clientes"&&(
               <div>
-                <div style={S.fieldRow}>
-                  <div style={S.field}><div style={S.fieldLabel}>Expediente</div><div>{j.nro||"—"}</div></div>
-                  <div style={S.field}><div style={S.fieldLabel}>Fuero</div><div>{j.fuero||"—"}</div></div>
-                  <div style={S.field}><div style={S.fieldLabel}>Juzgado</div><div>{j.juzgado?(parseInt(j.juzgado)||j.juzgado):"—"}</div></div>
+                {(j.clientes||[]).length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin clientes cargados</div>}
+                {(j.clientes||[]).map(c=>(
+                  <div key={c.id} style={{...S.pruebaRow,alignItems:"flex-start"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:500,fontSize:13}}>{c.apellido}, {c.nombre}</div>
+                      {c.dni&&<div style={{fontSize:12,color:"#555"}}>DNI: {c.dni}</div>}
+                      {c.correo&&<div style={{fontSize:12,color:"#555"}}>✉ {c.correo}</div>}
+                      {c.telefono&&<div style={{fontSize:12,color:"#555"}}>📞 {c.telefono}</div>}
+                      {c.domicilio&&<div style={{fontSize:12,color:"#555"}}>📍 {c.domicilio}</div>}
+                    </div>
+                    <button style={{...S.btnMini,color:"#E24B4A"}} onClick={()=>borrarCliente(j.id,c.id)}>✕</button>
+                  </div>
+                ))}
+                {/* Búsqueda entre clientes existentes */}
+                <div style={{marginTop:12,marginBottom:8,position:"relative"}}>
+                  <input style={{...S.input,width:"100%"}} placeholder="Buscar cliente existente (apellido o nombre)..." value={busq} onChange={e=>buscarClientes(j.id,e.target.value)}/>
+                  {sugs.length>0&&(
+                    <div style={{position:"absolute",top:32,left:0,right:0,background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:8,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",zIndex:50}}>
+                      {sugs.map(c=>(
+                        <div key={c.id} style={{padding:"8px 12px",cursor:"pointer",fontSize:13,borderBottom:"0.5px solid #f0f0f0"}}
+                          onClick={()=>seleccionarClienteSugerencia(j.id,c)}
+                          onMouseOver={e=>(e.currentTarget.style.background="#f9f9f8")}
+                          onMouseOut={e=>(e.currentTarget.style.background="#fff")}
+                        >{c.apellido}, {c.nombre}{c.dni?` · DNI ${c.dni}`:""}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div style={S.fieldRow}>
-                  <div style={S.field}><div style={S.fieldLabel}>Secretaría</div><div>{j.secretaria||"—"}</div></div>
-                  <div style={S.field}><div style={S.fieldLabel}>Sala</div><div>{j.sala||"—"}</div></div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                  <input style={S.input} placeholder="Apellido *" value={nc.apellido} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,apellido:e.target.value}}))}/>
+                  <input style={S.input} placeholder="Nombre" value={nc.nombre} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,nombre:e.target.value}}))}/>
+                  <input style={S.input} placeholder="DNI" value={nc.dni} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,dni:e.target.value}}))}/>
+                  <input style={S.input} placeholder="Correo" value={nc.correo} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,correo:e.target.value}}))}/>
+                  <input style={S.input} placeholder="Teléfono" value={nc.telefono} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,telefono:e.target.value}}))}/>
+                  <input style={S.input} placeholder="Domicilio" value={nc.domicilio} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,domicilio:e.target.value}}))}/>
                 </div>
-                {j.datosJuzgado&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>Datos del juzgado</div><div style={{fontSize:13}}>{j.datosJuzgado}</div></div>}
-                {j.datosContacto&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>Datos de contacto</div><div style={{fontSize:13}}>{j.datosContacto}</div></div>}
-                {j.cosasRelevantes&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>Cosas relevantes</div><div style={{fontSize:13}}>{j.cosasRelevantes}</div></div>}
-                {j.otraInfo&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>Otra información</div><div style={{fontSize:13}}>{j.otraInfo}</div></div>}
+                <button style={{...S.btnPrimary,marginTop:8}} onClick={()=>agregarCliente(j.id)}>+ Agregar cliente</button>
               </div>
             )}
           </div>
@@ -499,73 +757,213 @@ export default function Home() {
     )
   }
 
-  const juiciosFiltrados = juicios.filter(j=>filtroEstados.length===0?!INACTIVOS.includes(j.estado):filtroEstados.includes(j.estado)).sort((a,b)=>a.autos.localeCompare(b.autos,"es"))
-  const honorariosPendientes = juicios.flatMap(j=>(j.honorarios||[]).filter(h=>h.estado!=="Pago total").map(h=>({...h,autos:j.autos})))
-  const tareasFiltradas = vistaActual.filter(t=>filtroTipos.length===0||filtroTipos.includes(t.tipo||"Juicio"))
-    .sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha&&!b.fecha)return 0;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
-  const fld = (k:keyof JuicioForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(p=>({...p,[k]:e.target.value}))
+  // ─── RENDER: ASUNTO CARD (Pro Bono / Docencia) ────────────────────────────────
+  const renderAsunto = (a:Asunto) => {
+    const exp    = expandido===a.id
+    const nt     = ntaMap[a.id]||{texto:"",fecha:"",urgente:false}
+    const activas = a.tareas.filter(t=>!t.done).sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
+    const concluidas = a.tareas.filter(t=>t.done).slice(-5)
+    const tipoLabel = a.tipo==="probono"?"Pro Bono":"Docencia"
+    return (
+      <div key={a.id} id={`item-${a.id}`} style={{...S.card,borderColor:exp?"#378ADD":"#e5e7eb"}}>
+        <div style={S.cardHeader} onClick={()=>setExpandido(exp?null:a.id)}>
+          <div style={{flex:1}}>
+            <div style={S.cardTitle}>{a.nombre}</div>
+            {a.advertencia&&<div style={{fontSize:11,color:"#A32D2D",marginTop:3,fontWeight:500}}>⚠ {a.advertencia}</div>}
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+            <span style={{...S.badge,background:a.estado==="Abierta"?"#E6F1FB":"#EAF3DE",color:a.estado==="Abierta"?"#185FA5":"#3B6D11"}}>{a.estado}</span>
+            <button style={S.btnMini} onClick={e=>abrirEditarAsunto(a,e)}>✎</button>
+            <button style={{...S.btnMini,color:"#E24B4A"}} onClick={e=>eliminarAsunto(a,e)}>✕</button>
+          </div>
+        </div>
+        {exp&&(
+          <div style={{padding:"0 14px 14px"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+              {a.driveUrl&&<a href={a.driveUrl} target="_blank" rel="noopener noreferrer" style={{...S.btnMini,textDecoration:"none",fontSize:11,color:"#4285F4"}}>📁 Drive</a>}
+              {a.webUrl&&<a href={a.webUrl} target="_blank" rel="noopener noreferrer" style={{...S.btnMini,textDecoration:"none",fontSize:11,color:"#185FA5"}}>🌐 Web</a>}
+            </div>
+            {activas.map(t=>(
+              <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":"#fff",borderColor:t.urgente?"#E24B4A":"#e5e7eb",marginBottom:6}}>
+                <div style={S.cardHeader}>
+                  <div style={{...S.check,...(t.done?S.checkDone:{})}} onClick={()=>toggleDone(t)}>{t.done?"✓":""}</div>
+                  <div style={{flex:1,marginLeft:8,fontSize:13}}>{t.texto}</div>
+                  {t.urgente&&<span style={{fontSize:10,color:"#A32D2D",fontWeight:600,background:"#FCEBEB",padding:"1px 6px",borderRadius:8}}>URG</span>}
+                  {t.fecha&&<span style={{fontSize:11,color:"#888",whiteSpace:"nowrap"}}>{formatFecha(t.fecha)}</span>}
+                  <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}} onClick={()=>toggleUrgente(t)}>!</button>
+                  <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente)}}>✎</button>
+                </div>
+                {editId===t.id&&(
+                  <div style={{padding:"0 14px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
+                    <input style={{...S.input,flex:"3 1 180px"}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
+                    <input type="date" style={{...S.input,flex:"1 1 130px"}} value={editFecha} onChange={e=>setEditFecha(e.target.value)}/>
+                    <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente</label>
+                    <button style={S.btnPrimary} onClick={()=>guardarEdicion(t)}>Guardar</button>
+                    <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {activas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin tareas activas</div>}
+            <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
+              <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva tarea..." value={nt.texto} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,texto:e.target.value}}))} onKeyDown={e=>e.key==="Enter"&&agregarTareaAsunto(a.id,tipoLabel)}/>
+              <input type="date" style={{...S.input,flex:"1 1 140px"}} value={nt.fecha} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,fecha:e.target.value}}))}/>
+              <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={nt.urgente} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,urgente:e.target.checked}}))}/> Urgente</label>
+              <button style={S.btnPrimary} onClick={()=>agregarTareaAsunto(a.id,tipoLabel)}>+ Agregar</button>
+            </div>
+            {a.otraInfo&&<div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid #ebebeb"}}><div style={S.fieldLabel}>Información</div><div style={{fontSize:13}}>{a.otraInfo}</div></div>}
+            {concluidas.length>0&&(
+              <div style={{marginTop:10}}>
+                <div style={{fontSize:12,color:"#888",cursor:"pointer",userSelect:"none",padding:"4px 0"}} onClick={()=>setMostrarConc(p=>({...p,[a.id]:!mostrarConc[a.id]}))}>
+                  {mostrarConc[a.id]?"▾":"▸"} Tareas concluidas ({concluidas.length})
+                </div>
+                {mostrarConc[a.id]&&concluidas.map(t=>(
+                  <div key={t.id} style={{...S.card,opacity:0.6,marginBottom:4}}>
+                    <div style={S.cardHeader}>
+                      <div style={{...S.check,...S.checkDone}} onClick={()=>toggleDone(t)}>✓</div>
+                      <div style={{flex:1,marginLeft:8,fontSize:13,textDecoration:"line-through",color:"#aaa"}}>{t.texto}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
+  // ─── STATS JUICIOS ────────────────────────────────────────────────────────────
+  const statsPorEstado = TODOS_ESTADOS_JUICIO.map(e=>({
+    estado: e,
+    count: juicios.filter(j=>j.estado===e).length
+  })).filter(s=>s.count>0)
+
+  // ─── FORM HELPERS ─────────────────────────────────────────────────────────────
+  const fldJ = (k:keyof JuicioForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setFormJuicio(p=>({...p,[k]:e.target.value}))
+  const fldA = (k:keyof AsuntoForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setFormAsunto(p=>({...p,[k]:e.target.value}))
+
+  const honorariosPendientes = juicios.flatMap(j=>
+    (j.honorarios||[]).filter(h=>h.estado!=="Pago total").map(h=>({...h,autos:j.autos}))
+  )
+
+  const asuntosProbono  = asuntos.filter(a=>a.tipo==="probono")
+  const asuntosDocencia = asuntos.filter(a=>a.tipo==="docencia")
+  const tareasPersonales = tareas.filter(t=>t.tipo==="Personales"&&!t.done)
+
+  // ─── RENDER PRINCIPAL ─────────────────────────────────────────────────────────
   return (
     <div style={S.app}>
-      {modalOpen&&(
-        <div style={S.overlay} onClick={()=>setModalOpen(false)}>
+
+      {/* ── Modal Juicio ── */}
+      {modalJuicioOpen&&(
+        <div style={S.overlay} onClick={()=>setModalJuicioOpen(false)}>
           <div style={S.modal} onClick={e=>e.stopPropagation()}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div style={{fontWeight:600,fontSize:15}}>{editandoJuicio?"Editar juicio":"Nuevo juicio"}</div>
-              <button style={S.btnMini} onClick={()=>setModalOpen(false)}>✕</button>
+              <div style={{fontWeight:600,fontSize:15}}>{editandoJuicio?"Editar caso":"Nuevo caso / juicio"}</div>
+              <button style={S.btnMini} onClick={()=>setModalJuicioOpen(false)}>✕</button>
             </div>
             <div style={S.modalGrid}>
-              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Nombre / Carátula *</div><input style={S.inputM} value={form.autos} onChange={fld("autos")} placeholder="García c/ Pérez s/ Daños"/></div>
-              <div><div style={S.fieldLabel}>Estado</div><select style={S.inputM} value={form.estado} onChange={fld("estado")}>{TODOS_ESTADOS.map(e=><option key={e}>{e}</option>)}</select></div>
-              <div><div style={S.fieldLabel}>Nº Expediente</div><input style={S.inputM} value={form.nro} onChange={fld("nro")} placeholder="12345/2024"/></div>
-              <div><div style={S.fieldLabel}>Fuero</div><input style={S.inputM} value={form.fuero} onChange={fld("fuero")} placeholder="Civil, Laboral..."/></div>
-              <div><div style={S.fieldLabel}>Juzgado</div><input style={S.inputM} value={form.juzgado} onChange={fld("juzgado")}/></div>
-              <div><div style={S.fieldLabel}>Secretaría</div><input style={S.inputM} value={form.secretaria} onChange={fld("secretaria")}/></div>
-              <div><div style={S.fieldLabel}>Sala</div><input style={S.inputM} value={form.sala} onChange={fld("sala")}/></div>
-              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Advertencia</div><input style={S.inputM} value={form.advertencia} onChange={fld("advertencia")} placeholder="Algo importante..."/></div>
-              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Cosas relevantes</div><textarea style={{...S.inputM,height:60,resize:"vertical"}} value={form.cosasRelevantes} onChange={fld("cosasRelevantes")}/></div>
-              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Datos del juzgado</div><input style={S.inputM} value={form.datosJuzgado} onChange={fld("datosJuzgado")}/></div>
-              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Datos de contacto</div><input style={S.inputM} value={form.datosContacto} onChange={fld("datosContacto")}/></div>
-              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Otra información</div><textarea style={{...S.inputM,height:60,resize:"vertical"}} value={form.otraInfo} onChange={fld("otraInfo")}/></div>
-              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>📁 Link Drive</div><input style={S.inputM} value={form.driveUrl} onChange={fld("driveUrl")} placeholder="https://drive.google.com/..."/></div>
-              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>🤖 Link Proyecto IA</div><input style={S.inputM} value={form.iaUrl} onChange={fld("iaUrl")} placeholder="https://..."/></div>
+              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Nombre / Carátula *</div><input style={S.inputM} value={formJuicio.autos} onChange={fldJ("autos")} placeholder="García c/ Pérez s/ Daños"/></div>
+              <div><div style={S.fieldLabel}>Estado</div><select style={S.inputM} value={formJuicio.estado} onChange={fldJ("estado")}>{TODOS_ESTADOS_JUICIO.map(e=><option key={e}>{e}</option>)}</select></div>
+              <div><div style={S.fieldLabel}>Nº Expediente</div><input style={S.inputM} value={formJuicio.nro} onChange={fldJ("nro")} placeholder="12345/2024"/></div>
+              <div><div style={S.fieldLabel}>Fuero</div><input style={S.inputM} value={formJuicio.fuero} onChange={fldJ("fuero")} placeholder="Civil, Laboral..."/></div>
+              <div><div style={S.fieldLabel}>Juzgado</div><input style={S.inputM} value={formJuicio.juzgado} onChange={fldJ("juzgado")}/></div>
+              <div><div style={S.fieldLabel}>Secretaría</div><input style={S.inputM} value={formJuicio.secretaria} onChange={fldJ("secretaria")}/></div>
+              <div><div style={S.fieldLabel}>Sala</div><input style={S.inputM} value={formJuicio.sala} onChange={fldJ("sala")}/></div>
+              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Advertencia</div><input style={S.inputM} value={formJuicio.advertencia} onChange={fldJ("advertencia")} placeholder="Algo importante a destacar..."/></div>
+              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Datos del juzgado</div><input style={S.inputM} value={formJuicio.datosJuzgado} onChange={fldJ("datosJuzgado")}/></div>
+              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Otra información</div><textarea style={{...S.inputM,height:60,resize:"vertical"}} value={formJuicio.otraInfo} onChange={fldJ("otraInfo")}/></div>
+              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>📁 Link Drive</div><input style={S.inputM} value={formJuicio.driveUrl} onChange={fldJ("driveUrl")} placeholder="https://drive.google.com/..."/></div>
+              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>⚖ Link PJN (expediente)</div><input style={S.inputM} value={formJuicio.pjnUrl} onChange={fldJ("pjnUrl")} placeholder="https://scw.pjn.gov.ar/..."/></div>
+              <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>🤖 Link Proyecto IA</div><input style={S.inputM} value={formJuicio.iaUrl} onChange={fldJ("iaUrl")} placeholder="https://..."/></div>
             </div>
             <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:20}}>
-              <button style={S.btn} onClick={()=>setModalOpen(false)}>Cancelar</button>
-              <button style={S.btnPrimary} onClick={guardarJuicio} disabled={saving}>{saving?"Guardando...":editandoJuicio?"Guardar cambios":"Crear juicio"}</button>
+              <button style={S.btn} onClick={()=>setModalJuicioOpen(false)}>Cancelar</button>
+              <button style={S.btnPrimary} onClick={guardarJuicio} disabled={saving}>{saving?"Guardando...":editandoJuicio?"Guardar cambios":"Crear caso"}</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── Modal Asunto ── */}
+      {modalAsuntoOpen&&(
+        <div style={S.overlay} onClick={()=>setModalAsuntoOpen(false)}>
+          <div style={S.modal} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div style={{fontWeight:600,fontSize:15}}>{editandoAsunto?"Editar asunto":"Nuevo asunto"}</div>
+              <button style={S.btnMini} onClick={()=>setModalAsuntoOpen(false)}>✕</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div><div style={S.fieldLabel}>Tipo</div><select style={S.inputM} value={formAsunto.tipo} onChange={fldA("tipo")}><option value="probono">Pro Bono</option><option value="docencia">Docencia</option></select></div>
+              <div><div style={S.fieldLabel}>Nombre / Carátula *</div><input style={S.inputM} value={formAsunto.nombre} onChange={fldA("nombre")} placeholder="Nombre del asunto..."/></div>
+              <div><div style={S.fieldLabel}>Estado</div><select style={S.inputM} value={formAsunto.estado} onChange={fldA("estado")}><option>Abierta</option><option>Cerrada</option></select></div>
+              <div><div style={S.fieldLabel}>Advertencia</div><input style={S.inputM} value={formAsunto.advertencia} onChange={fldA("advertencia")} placeholder="Algo importante..."/></div>
+              <div><div style={S.fieldLabel}>Otra información</div><textarea style={{...S.inputM,height:60,resize:"vertical"}} value={formAsunto.otraInfo} onChange={fldA("otraInfo")}/></div>
+              <div><div style={S.fieldLabel}>📁 Link Drive</div><input style={S.inputM} value={formAsunto.driveUrl} onChange={fldA("driveUrl")} placeholder="https://drive.google.com/..."/></div>
+              <div><div style={S.fieldLabel}>🌐 Link web</div><input style={S.inputM} value={formAsunto.webUrl} onChange={fldA("webUrl")} placeholder="https://..."/></div>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:20}}>
+              <button style={S.btn} onClick={()=>setModalAsuntoOpen(false)}>Cancelar</button>
+              <button style={S.btnPrimary} onClick={guardarAsunto} disabled={saving}>{saving?"Guardando...":editandoAsunto?"Guardar cambios":"Crear asunto"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sidebar ── */}
       <div style={S.sidebar}>
         <div style={S.sidebarHeader}>
           <div style={{fontWeight:500,fontSize:14}}>Agenda Legal</div>
           <div style={{fontSize:11,color:"#888"}}>{session.user?.name}</div>
         </div>
-        {[{id:"tareas",label:"Tareas",badge:tareasActivas.length},{id:"juicios",label:"Juicios",badge:juiciosFiltrados.length},{id:"probono",label:"Pro Bono",badge:null},{id:"docencia",label:"Docencia",badge:null},{id:"personales",label:"Personales",badge:null},{id:"honorarios",label:"Honorarios",badge:honorariosPendientes.length||null}].map(item=>(
+
+        {/* Nav principal */}
+        {[
+          {id:"tareas",      label:"Tareas",          badge:tareasActivas.length},
+          {id:"juicios",     label:"Casos y Juicios", badge:juiciosFiltrados.length},
+          {id:"probono",     label:"Pro Bono",         badge:asuntosProbono.length||null},
+          {id:"docencia",    label:"Docencia",         badge:asuntosDocencia.length||null},
+          {id:"personales",  label:"Personales",       badge:tareasPersonales.length||null},
+        ].map(item=>(
           <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>setPanel(item.id)}>
             {item.label}
-            {item.badge?<span style={S.navBadge}>{item.badge}</span>:null}
+            {item.badge!=null&&item.badge>0?<span style={S.navBadge}>{item.badge}</span>:null}
           </div>
         ))}
+
+        <div style={{height:1,background:"#e5e7eb",margin:"6px 14px"}}/>
+
+        {/* Honorarios y otros */}
+        {[
+          {id:"honorarios",  label:"Honorarios",      badge:honorariosPendientes.length||null},
+        ].map(item=>(
+          <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>setPanel(item.id)}>
+            {item.label}
+            {item.badge!=null&&item.badge>0?<span style={S.navBadge}>{item.badge}</span>:null}
+          </div>
+        ))}
+
         <div style={{flex:1}}/>
-        <div style={{padding:"10px 14px",borderTop:"0.5px solid #e5e7eb"}}>
-          {juicios.length===0&&<button style={{...S.btnPrimary,fontSize:12,width:"100%",marginBottom:6}} onClick={async()=>{const r=await fetch('/api/seed',{method:'POST'});const d=await r.json();if(d.ok)window.location.reload();else alert(d.msg||'Error')}}>Importar mis datos</button>}
+        <div style={{padding:"10px 14px",borderTop:"0.5px solid #e5e7eb",display:"flex",flexDirection:"column",gap:6}}>
+          <button style={{...S.btn,fontSize:12,width:"100%"}} onClick={descargarBackup}>⬇ Backup</button>
+          {juicios.length===0&&<button style={{...S.btnPrimary,fontSize:12,width:"100%"}} onClick={async()=>{const r=await fetch('/api/seed',{method:'POST'});const d=await r.json();if(d.ok)window.location.reload();else alert(d.msg||'Error')}}>Importar datos</button>}
           <button style={{...S.btn,fontSize:12,width:"100%"}} onClick={()=>signOut()}>Cerrar sesión</button>
         </div>
       </div>
 
+      {/* ── Main ── */}
       <div style={S.main}>
+        {/* Topbar */}
         <div style={S.topbar}>
-          <div style={{fontWeight:500,fontSize:20}}>
-            {{tareas:"Tareas",juicios:"Juicios",probono:"Pro Bono",docencia:"Docencia",personales:"Personales",honorarios:"Honorarios"}[panel]}
+          <div style={{fontWeight:500,fontSize:20,marginRight:12}}>
+            {{tareas:"Tareas",juicios:"Casos y Juicios",probono:"Pro Bono",docencia:"Docencia",personales:"Personales",honorarios:"Honorarios"}[panel]}
           </div>
+
           {panel==="tareas"&&<>
-            <div style={S.sepPipe}/>
             {hayPendientes&&<button style={S.btnActualizar} onClick={actualizarVista}>Actualizar vista ({Object.keys(cambios).length})</button>}
             <div style={S.sepDot}>·</div>
-            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
               {TIPOS_TAREA.map(tipo=>(
                 <button key={tipo} style={{...S.filterBtn,...(filtroTipos.includes(tipo)?S.filterBtnActive:{})}}
                   onClick={()=>setFiltroTipos(p=>p.includes(tipo)?p.filter(x=>x!==tipo):[...p,tipo])}>{tipo}</button>
@@ -576,33 +974,105 @@ export default function Home() {
               <button style={S.filterBtn} onClick={()=>setPanelDerechoVisible(v=>!v)}>{panelDerechoVisible?"▶ Panel":"◀ Panel"}</button>
             </div>
           </>}
-          {panel==="juicios"&&<div style={{display:"flex",gap:6,alignItems:"center",marginLeft:8,flexWrap:"wrap"}}>
-            {TODOS_ESTADOS.map(e=>(
-              <button key={e} style={{...S.filterBtn,...(filtroEstados.includes(e)?{background:ESTADOS[e]||"#f0f0f0",color:ESTADOS_TEXT[e]||"#333",borderColor:ESTADOS_TEXT[e]||"#ccc"}:{})}}
+
+          {panel==="juicios"&&<div style={{display:"flex",gap:6,alignItems:"center",marginLeft:4,flexWrap:"wrap"}}>
+            {TODOS_ESTADOS_JUICIO.map(e=>(
+              <button key={e} style={{...S.filterBtn,...(filtroEstados.includes(e)?{background:ESTADOS_BG[e]||"#f0f0f0",color:ESTADOS_TX[e]||"#333",borderColor:ESTADOS_TX[e]||"#ccc"}:{})}}
                 onClick={()=>setFiltroEstados(p=>p.includes(e)?p.filter(x=>x!==e):[...p,e])}>{e}</button>
             ))}
             {filtroEstados.length>0&&<button style={{...S.filterBtn,color:"#888"}} onClick={()=>setFiltroEstados([])}>✕</button>}
-            <button style={S.btnPrimary} onClick={abrirNuevo}>+ Nuevo juicio</button>
+            <button style={S.btnPrimary} onClick={abrirNuevoJuicio}>+ Nuevo</button>
           </div>}
+
+          {(panel==="probono"||panel==="docencia")&&(
+            <button style={S.btnPrimary} onClick={()=>abrirNuevoAsunto(panel)}>+ Nuevo asunto</button>
+          )}
         </div>
 
+        {/* Contenido */}
         <div style={{flex:1,display:"flex",overflow:"hidden"}}>
           <div style={S.content}>
             {loading&&<div style={{color:"#888",fontSize:14}}>Cargando datos...</div>}
+
+            {/* Panel Tareas */}
             {!loading&&panel==="tareas"&&(
-              filtroTipos.length>0?(
-                tareasFiltradas.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay tareas.</div>:tareasFiltradas.map(t=>renderTareaNuevo(t))
-              ):<>
-                {seccion("URGENTES",urgentesArriba,"#E24B4A")}
-                {seccion("ATRASADAS",atrasadas,"#9B59B6")}
-                {seccion("HOY",vencenHoy,"#378ADD")}
-                {seccion("PRÓXIMAS TAREAS",proximas,"#555")}
-                {vistaActual.filter(t=>!t.done).length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
-              </>
+              <div>
+                {filtroTipos.length>0?(
+                  tareasFiltradas.length===0
+                    ?<div style={{color:"#aaa",fontSize:14}}>No hay tareas.</div>
+                    :tareasFiltradas.map(t=>renderTarea(t))
+                ):<>
+                  {seccion("URGENTES",urgentesArriba,"#E24B4A")}
+                  {seccion("ATRASADAS",atrasadas,"#9B59B6")}
+                  {seccion("HOY",vencenHoy,"#378ADD")}
+                  {seccion("PRÓXIMAS TAREAS",proximas,"#555")}
+                  {vistaActual.filter(t=>!t.done).length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
+                </>}
+              </div>
             )}
+
+            {/* Panel Juicios */}
             {!loading&&panel==="juicios"&&(
-              <div>{juiciosFiltrados.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay juicios con ese filtro.</div>:juiciosFiltrados.map(renderJuicio)}</div>
+              <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  {juiciosFiltrados.length===0
+                    ?<div style={{color:"#aaa",fontSize:14}}>No hay casos con ese filtro.</div>
+                    :juiciosFiltrados.map(renderJuicio)}
+                </div>
+                {/* Barra lateral de stats */}
+                {statsVisible&&(
+                  <div style={{width:180,flexShrink:0,background:"#f9f9f8",border:"0.5px solid #e5e7eb",borderRadius:12,padding:"14px 16px",position:"sticky",top:0}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                      <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em"}}>POR ESTADO</div>
+                      <button style={{...S.btnMini,fontSize:10}} onClick={()=>setStatsVisible(false)}>✕</button>
+                    </div>
+                    {statsPorEstado.map(s=>(
+                      <div key={s.estado} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"0.5px solid #ebebeb"}}>
+                        <span style={{fontSize:12,color:"#555"}}>{s.estado}</span>
+                        <span style={{fontSize:13,fontWeight:600,color:ESTADOS_TX[s.estado]||"#111",background:ESTADOS_BG[s.estado]||"#f0f0f0",padding:"1px 8px",borderRadius:8}}>{s.count}</span>
+                      </div>
+                    ))}
+                    <div style={{marginTop:10,paddingTop:8,borderTop:"0.5px solid #e5e7eb",display:"flex",justifyContent:"space-between"}}>
+                      <span style={{fontSize:12,color:"#888"}}>Total</span>
+                      <span style={{fontSize:13,fontWeight:600}}>{juicios.length}</span>
+                    </div>
+                  </div>
+                )}
+                {!statsVisible&&(
+                  <button style={{...S.filterBtn,writingMode:"vertical-rl",fontSize:11,padding:"8px 4px"}} onClick={()=>setStatsVisible(true)}>▶ Stats</button>
+                )}
+              </div>
             )}
+
+            {/* Panel Pro Bono */}
+            {!loading&&panel==="probono"&&(
+              <div>
+                {asuntosProbono.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay asuntos de Pro Bono.</div>:asuntosProbono.map(renderAsunto)}
+              </div>
+            )}
+
+            {/* Panel Docencia */}
+            {!loading&&panel==="docencia"&&(
+              <div>
+                {asuntosDocencia.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay asuntos de Docencia.</div>:asuntosDocencia.map(renderAsunto)}
+              </div>
+            )}
+
+            {/* Panel Personales */}
+            {!loading&&panel==="personales"&&(
+              <div>
+                <div style={{marginBottom:14,display:"flex",gap:6,flexWrap:"wrap"}}>
+                  <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva actividad personal..." value={ntPersonal.texto} onChange={e=>setNtPersonal(p=>({...p,texto:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&agregarTareaPersonal()}/>
+                  <input type="date" style={{...S.input,flex:"1 1 140px"}} value={ntPersonal.fecha} onChange={e=>setNtPersonal(p=>({...p,fecha:e.target.value}))}/>
+                  <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={ntPersonal.urgente} onChange={e=>setNtPersonal(p=>({...p,urgente:e.target.checked}))}/> Urgente</label>
+                  <button style={S.btnPrimary} onClick={agregarTareaPersonal}>+ Agregar</button>
+                </div>
+                {tareasPersonales.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay actividades personales activas.</div>}
+                {tareasPersonales.map(t=>renderTarea(t))}
+              </div>
+            )}
+
+            {/* Panel Honorarios */}
             {!loading&&panel==="honorarios"&&(
               <div>
                 {honorariosPendientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay honorarios pendientes.</div>:honorariosPendientes.map((h,i)=>(
@@ -619,10 +1089,9 @@ export default function Home() {
                 ))}
               </div>
             )}
-            {!loading&&(panel==="probono"||panel==="docencia"||panel==="personales")&&(
-              <div style={{color:"#aaa",fontSize:14}}>Próximamente — gestión de asuntos de {panel==="probono"?"Pro Bono":panel==="docencia"?"Docencia":"Personales"}.</div>
-            )}
           </div>
+
+          {/* Panel derecho (solo en Tareas) */}
           {panel==="tareas"&&panelDerechoVisible&&(
             <div style={S.panelDerecho}>{renderPanelDerecho()}</div>
           )}
@@ -632,53 +1101,53 @@ export default function Home() {
   )
 }
 
+// ─── ESTILOS ─────────────────────────────────────────────────────────────────
 const S: Record<string,React.CSSProperties> = {
-  app:{display:"flex",height:"100vh",fontFamily:"system-ui, sans-serif",fontSize:14,color:"#111"},
-  sidebar:{width:220,background:"#f9f9f8",borderRight:"0.5px solid #e5e7eb",display:"flex",flexDirection:"column",flexShrink:0},
+  app:         {display:"flex",height:"100vh",fontFamily:"system-ui, sans-serif",fontSize:14,color:"#111"},
+  sidebar:     {width:220,background:"#f9f9f8",borderRight:"0.5px solid #e5e7eb",display:"flex",flexDirection:"column",flexShrink:0},
   sidebarHeader:{padding:"14px 14px 10px",borderBottom:"0.5px solid #e5e7eb"},
-  navItem:{padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#666",borderLeft:"2px solid transparent",display:"flex",justifyContent:"space-between",alignItems:"center"},
+  navItem:     {padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#666",borderLeft:"2px solid transparent",display:"flex",justifyContent:"space-between",alignItems:"center"},
   navItemActive:{background:"#fff",color:"#111",borderLeft:"2px solid #378ADD",fontWeight:500},
-  navBadge:{background:"#E6F1FB",color:"#185FA5",fontSize:11,padding:"1px 6px",borderRadius:10},
-  main:{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0},
-  topbar:{padding:"16px 20px",borderBottom:"0.5px solid #e5e7eb",background:"#fff",display:"flex",alignItems:"center",gap:0,flexShrink:0},
-  sepPipe:{width:1,height:18,background:"#e0e0e0",margin:"0 16px",flexShrink:0},
-  sepDot:{fontSize:16,color:"#d0d0d0",margin:"0 12px",flexShrink:0,lineHeight:"1"},
-  filterBtn:{fontSize:12,padding:"4px 12px",border:"0.5px solid #d0d0d0",borderRadius:8,cursor:"pointer",background:"transparent",color:"#555"},
+  navBadge:    {background:"#E6F1FB",color:"#185FA5",fontSize:11,padding:"1px 6px",borderRadius:10},
+  main:        {flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0},
+  topbar:      {padding:"12px 20px",borderBottom:"0.5px solid #e5e7eb",background:"#fff",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flexShrink:0},
+  sepDot:      {fontSize:16,color:"#d0d0d0",flexShrink:0,lineHeight:"1"},
+  filterBtn:   {fontSize:12,padding:"4px 12px",border:"0.5px solid #d0d0d0",borderRadius:8,cursor:"pointer",background:"transparent",color:"#555"},
   filterBtnActive:{background:"#378ADD",color:"#fff",borderColor:"#378ADD"},
   btnActualizar:{fontSize:12,padding:"5px 14px",border:"none",borderRadius:8,cursor:"pointer",background:"#378ADD",color:"#fff",fontWeight:500},
-  content:{flex:1,overflowY:"auto",padding:"14px 18px"},
-  panelDerecho:{width:260,borderLeft:"0.5px solid #e5e7eb",background:"#f9f9f8",flexShrink:0,overflowY:"auto"},
-  card:{background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:12,marginBottom:8,overflow:"hidden"},
-  cardHeader:{padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer"},
-  cardTitle:{fontSize:13,fontWeight:500,lineHeight:1.35},
-  cardMeta:{fontSize:11,color:"#888",marginTop:2},
-  badge:{fontSize:11,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap",flexShrink:0},
-  tabs:{display:"flex",borderBottom:"0.5px solid #e5e7eb",marginBottom:12,marginTop:10},
-  tab:{fontSize:12,padding:"6px 12px",cursor:"pointer",color:"#888",borderBottom:"2px solid transparent",marginBottom:-0.5},
-  tabActive:{color:"#378ADD",borderBottom:"2px solid #378ADD",fontWeight:500},
-  pruebaRow:{display:"flex",alignItems:"flex-start",gap:8,padding:"8px 0",borderBottom:"0.5px solid #f0f0f0"},
-  check:{width:15,height:15,border:"0.5px solid #ccc",borderRadius:3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0},
-  checkDone:{background:"#EAF3DE",borderColor:"#639922",color:"#3B6D11"},
-  btnEdit:{fontSize:15,padding:"4px 8px",border:"0.5px solid #e5e7eb",borderRadius:6,cursor:"pointer",background:"transparent",color:"#aaa",flexShrink:0},
-  btnPosponer:{fontSize:12,padding:"4px 10px",border:"0.5px solid #b5d4f4",borderRadius:6,cursor:"pointer",background:"#E6F1FB",color:"#185FA5",whiteSpace:"nowrap"},
-  btnUrgente:{fontSize:12,padding:"4px 10px",border:"0.5px solid #E24B4A",borderRadius:6,cursor:"pointer",background:"transparent",color:"#E24B4A",whiteSpace:"nowrap"},
-  linkDrive:{fontSize:12,padding:"4px 10px",border:"0.5px solid #c5d8fb",borderRadius:6,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:3,color:"#4285F4",background:"#f0f5ff",whiteSpace:"nowrap"},
-  linkPjn:{fontSize:12,padding:"4px 10px",border:"0.5px solid #b5d4f4",borderRadius:6,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:3,color:"#185FA5",background:"#E6F1FB",whiteSpace:"nowrap"},
-  pjLink:{fontSize:12,padding:"7px 12px",border:"0.5px solid #e5e7eb",borderRadius:8,textDecoration:"none",display:"flex",alignItems:"center",gap:6,color:"#555",background:"#fff"},
-  input:{fontSize:12,padding:"4px 8px",border:"0.5px solid #ccc",borderRadius:8,background:"#f9f9f8",color:"#111",flex:1},
-  btn:{fontSize:12,padding:"5px 12px",border:"0.5px solid #ccc",borderRadius:8,cursor:"pointer",background:"transparent",color:"#111"},
-  btnPrimary:{fontSize:12,padding:"5px 12px",border:"none",borderRadius:8,cursor:"pointer",background:"#378ADD",color:"#fff",whiteSpace:"nowrap"},
-  btnMini:{fontSize:12,padding:"2px 6px",border:"0.5px solid #e5e7eb",borderRadius:6,cursor:"pointer",background:"transparent",color:"#888"},
-  btnGoogle:{fontSize:14,padding:"10px 24px",border:"0.5px solid #ccc",borderRadius:8,cursor:"pointer",background:"#fff",color:"#111"},
+  content:     {flex:1,overflowY:"auto",padding:"14px 18px"},
+  panelDerecho:{width:240,borderLeft:"0.5px solid #e5e7eb",background:"#f9f9f8",flexShrink:0,overflowY:"auto"},
+  card:        {background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:12,marginBottom:8,overflow:"hidden"},
+  cardHeader:  {padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer"},
+  cardTitle:   {fontSize:13,fontWeight:500,lineHeight:1.35},
+  cardMeta:    {fontSize:11,color:"#888",marginTop:2},
+  badge:       {fontSize:11,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap",flexShrink:0},
+  tabs:        {display:"flex",borderBottom:"0.5px solid #e5e7eb",marginBottom:12,marginTop:10,overflowX:"auto"},
+  tab:         {fontSize:12,padding:"6px 12px",cursor:"pointer",color:"#888",borderBottom:"2px solid transparent",marginBottom:-0.5,whiteSpace:"nowrap"},
+  tabActive:   {color:"#378ADD",borderBottom:"2px solid #378ADD",fontWeight:500},
+  pruebaRow:   {display:"flex",alignItems:"flex-start",gap:8,padding:"8px 0",borderBottom:"0.5px solid #f0f0f0"},
+  check:       {width:15,height:15,border:"0.5px solid #ccc",borderRadius:3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0},
+  checkDone:   {background:"#EAF3DE",borderColor:"#639922",color:"#3B6D11"},
+  btnEdit:     {fontSize:15,padding:"4px 8px",border:"0.5px solid #e5e7eb",borderRadius:6,cursor:"pointer",background:"transparent",color:"#aaa",flexShrink:0},
+  btnPosponer: {fontSize:12,padding:"4px 10px",border:"0.5px solid #b5d4f4",borderRadius:6,cursor:"pointer",background:"#E6F1FB",color:"#185FA5",whiteSpace:"nowrap"},
+  btnUrgente:  {fontSize:12,padding:"4px 10px",border:"0.5px solid #E24B4A",borderRadius:6,cursor:"pointer",background:"transparent",color:"#E24B4A",whiteSpace:"nowrap"},
+  linkDrive:   {fontSize:12,padding:"4px 10px",border:"0.5px solid #c5d8fb",borderRadius:6,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:3,color:"#4285F4",background:"#f0f5ff",whiteSpace:"nowrap"},
+  linkPjn:     {fontSize:12,padding:"4px 10px",border:"0.5px solid #b5d4f4",borderRadius:6,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:3,color:"#185FA5",background:"#E6F1FB",whiteSpace:"nowrap"},
+  pjLink:      {fontSize:12,padding:"7px 12px",border:"0.5px solid #e5e7eb",borderRadius:8,textDecoration:"none",display:"flex",alignItems:"center",gap:6,color:"#555",background:"#fff"},
+  input:       {fontSize:12,padding:"4px 8px",border:"0.5px solid #ccc",borderRadius:8,background:"#f9f9f8",color:"#111",flex:1},
+  btn:         {fontSize:12,padding:"5px 12px",border:"0.5px solid #ccc",borderRadius:8,cursor:"pointer",background:"transparent",color:"#111"},
+  btnPrimary:  {fontSize:12,padding:"5px 12px",border:"none",borderRadius:8,cursor:"pointer",background:"#378ADD",color:"#fff",whiteSpace:"nowrap"},
+  btnMini:     {fontSize:12,padding:"2px 6px",border:"0.5px solid #e5e7eb",borderRadius:6,cursor:"pointer",background:"transparent",color:"#888"},
+  btnGoogle:   {fontSize:14,padding:"10px 24px",border:"0.5px solid #ccc",borderRadius:8,cursor:"pointer",background:"#fff",color:"#111"},
   sectionLabel:{fontSize:11,fontWeight:600,letterSpacing:"0.06em",marginTop:14,marginBottom:6,paddingBottom:4,borderBottom:"0.5px solid #e5e7eb"},
-  fieldRow:{display:"flex",gap:16,flexWrap:"wrap",marginBottom:8},
-  field:{flex:1,minWidth:100},
-  fieldLabel:{fontSize:10,color:"#888",marginBottom:2,fontWeight:500,letterSpacing:"0.04em"},
-  login:{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f9f9f8"},
-  loginCard:{background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:12,padding:40,textAlign:"center"},
-  loading:{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",color:"#888"},
-  overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center"},
-  modal:{background:"#fff",borderRadius:14,padding:24,width:"min(640px, 95vw)",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 8px 32px rgba(0,0,0,0.18)"},
-  modalGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px"},
-  inputM:{fontSize:13,padding:"6px 10px",border:"0.5px solid #ccc",borderRadius:8,background:"#f9f9f8",color:"#111",width:"100%",boxSizing:"border-box"},
+  fieldRow:    {display:"flex",gap:16,flexWrap:"wrap",marginBottom:8},
+  field:       {flex:1,minWidth:100},
+  fieldLabel:  {fontSize:10,color:"#888",marginBottom:2,fontWeight:500,letterSpacing:"0.04em"},
+  login:       {display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f9f9f8"},
+  loginCard:   {background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:12,padding:40,textAlign:"center"},
+  loading:     {display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",color:"#888"},
+  overlay:     {position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center"},
+  modal:       {background:"#fff",borderRadius:14,padding:24,width:"min(640px, 95vw)",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 8px 32px rgba(0,0,0,0.18)"},
+  modalGrid:   {display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px"},
+  inputM:      {fontSize:13,padding:"6px 10px",border:"0.5px solid #ccc",borderRadius:8,background:"#f9f9f8",color:"#111",width:"100%",boxSizing:"border-box"},
 }
