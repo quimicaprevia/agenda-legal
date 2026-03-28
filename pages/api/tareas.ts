@@ -22,12 +22,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "POST") {
-    const { texto, fecha, juicioId, urgente, tipo, tema } = req.body
+    const { texto, fecha, juicioId, asuntoId, urgente, tipo, tema } = req.body
     const tarea = await prisma.tarea.create({
       data: {
         texto,
         fecha: fecha ? new Date(fecha) : null,
         juicioId: juicioId || null,
+        asuntoId: asuntoId || null,
         urgente: urgente || false,
         tipo: tipo || null,
         tema: tema || null,
