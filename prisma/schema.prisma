@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
@@ -36,4 +36,48 @@ model Juicio {
   iaUrl           String?
   datosJuzgado    String?
   datosContacto   String?
-  otra
+  otraInfo        String?
+  createdAt       DateTime    @default(now())
+  tareas          Tarea[]
+  pruebas         Prueba[]
+  honorarios      Honorario[]
+}
+
+model Tarea {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  juicioId  String?
+  juicio    Juicio?  @relation(fields: [juicioId], references: [id])
+  texto     String
+  fecha     DateTime?
+  urgente   Boolean  @default(false)
+  done      Boolean  @default(false)
+  tipo      String?
+  tema      String?
+  createdAt DateTime @default(now())
+}
+
+model Prueba {
+  id          String    @id @default(cuid())
+  juicioId    String
+  juicio      Juicio    @relation(fields: [juicioId], references: [id])
+  tipo        String
+  descripcion String?
+  detalle     String?
+  estado      String    @default("Ofrecida")
+  vencimiento DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model Honorario {
+  id            String   @id @default(cuid())
+  juicioId      String
+  juicio        Juicio   @relation(fields: [juicioId], references: [id])
+  clienteContraparte String?
+  total         String?
+  pagado        String?
+  estado        String   @default("Pendiente")
+  observaciones String?
+  createdAt     DateTime @default(now())
+}
