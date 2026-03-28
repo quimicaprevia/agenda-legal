@@ -1,5 +1,5 @@
 import { useSession, signIn, signOut } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 
 type Prueba = { id: string; tipo: string; contenido?: string; detalle?: string; estado: string }
 type Tarea = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; juicio?: { autos: string; id: string } }
@@ -37,14 +37,16 @@ export default function Home() {
   const [editFecha, setEditFecha] = useState("")
   const [editUrgente, setEditUrgente] = useState(false)
   const [mostrarConc, setMostrarConc] = useState<Record<string,boolean>>({})
-  // snapshot: orden y contenido fijos hasta que el usuario presione "Actualizar vista"
-  const [snapshot, setSnapshot] = useState<Tarea[]|null>(null)
-  // pendientes: cambios locales aún no aplicados al estado real
-  const [pendientes, setPendientes] = useState<Record<string,Partial<Tarea>>>({})
   const [modalOpen, setModalOpen] = useState(false)
   const [editandoJuicio, setEditandoJuicio] = useState<Juicio|null>(null)
   const [form, setForm] = useState<JuicioForm>(FORM_VACIO)
   const [saving, setSaving] = useState(false)
+
+  // Vista congelada: se actualiza solo al presionar "Actualizar vista"
+  // Contiene las tareas tal como se muestran actualmente (con cambios pendientes ya aplicados)
+  const [vistaCongelada, setVistaCongelada] = useState<Tarea[]>([])
+  // Cambios pendientes aún no aplicados al estado real ni a la vista congelada
+  const [cambios, setCambios] = useState<Record<string,Partial<Tarea>>>({})
 
   useEffect(() => {
     if (expandido) {
@@ -58,7 +60,13 @@ export default function Home() {
   useEffect(() => {
     if (session) {
       Promise.all([fetch("/api/juicios").then(r=>r.json()), fetch("/api/tareas").then(r=>r.json())])
-        .then(([j,t]) => { setJuicios(Array.isArray(j)?j:[]); setTareas(Array.isArray(t)?t:[]); setSnapshot(Array.isArray(t)?t:[]); setLoading(false) })
+        .then(([j,t]) => {
+          setJuicios(Array.isArray(j)?j:[])
+          const ts = Array.isArray(t)?t:[]
+          setTareas(ts)
+          setVistaCongelada(ts.filter(x=>!x.done))
+          setLoading(false)
+        })
         .catch(()=>setLoading(false))
     }
   }, [session])
@@ -74,21 +82,29 @@ export default function Home() {
 
   const hoy = new Date(); hoy.setHours(0,0,0,0)
   const inactivosSet = new Set(juicios.filter(j=>INACTIVOS.includes(j.estado)).map(j=>j.id))
-  const tareasActivas = tareas.filter(t=>!t.done && !(t.juicioId && inactivosSet.has(t.juicioId)))
+
+  // Para métricas y badge: estado real
+  const tareasActivas = tareas.filter(t=>!t.done && !(t.juicioId&&inactivosSet.has(t.juicioId)))
+
+  // Para la vista del panel Tareas: vistaCongelada + cambios aplicados visualmente
+  // vistaCongelada mantiene el orden y solo cambia al presionar "Actualizar vista"
   const esAtrasada = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha)<hoy }
   const esHoy = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha).getTime()===hoy.getTime() }
   const esProxima = (t:Tarea) => !esAtrasada(t)&&!esHoy(t)
 
-  // Vista basada en snapshot (orden fijo) + pendientes (cambios visuales)
-  const snap = snapshot || tareas
-  const vistaBase = snap
+  // Vista: aplica cambios visuales sobre la vista congelada, sin reordenar
+  const vistaActual = vistaCongelada
     .filter(t=>!(t.juicioId&&inactivosSet.has(t.juicioId)))
-    .map(t=>({...t,...(pendientes[t.id]||{})}))
-    .filter(t=>!t.done)  // done aquí ya incluye pendientes porque el map se aplicó antes
-  const urgentesArriba = vistaBase.filter(t=>t.urgente&&(esAtrasada(t)||esHoy(t)))
-  const atrasadas = vistaBase.filter(t=>esAtrasada(t)&&!urgentesArriba.includes(t))
-  const vencenHoy = vistaBase.filter(t=>esHoy(t)&&!urgentesArriba.includes(t))
-  const proximas = vistaBase.filter(t=>esProxima(t)&&!urgentesArriba.includes(t))
+    .map(t=>({...t,...(cambios[t.id]||{})}))
+  // Separar en secciones (el orden dentro de cada sección respeta vistaCongelada)
+  const urgentesArriba = vistaActual.filter(t=>!t.done&&t.urgente&&(esAtrasada(t)||esHoy(t)))
+  const atrasadas = vistaActual.filter(t=>!t.done&&esAtrasada(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const vencenHoy = vistaActual.filter(t=>!t.done&&esHoy(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const proximas = vistaActual.filter(t=>!t.done&&esProxima(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  // Incluir recién completadas (done=true en cambios) para mostrarlas tachadas en su lugar
+  const completadasRecientes = vistaActual.filter(t=>t.done)
+
+  const hayPendientes = Object.keys(cambios).length > 0
 
   const abrirNuevo = () => { setEditandoJuicio(null); setForm(FORM_VACIO); setModalOpen(true) }
   const abrirEditar = (j:Juicio, e:React.MouseEvent) => {
@@ -116,22 +132,43 @@ export default function Home() {
   }
 
   const toggleDone = async (t:Tarea) => {
-    if (!t.done && t.juicioId) {
+    // Verificar última tarea activa de juicio activo
+    const doneActual = cambios[t.id]?.done ?? t.done
+    if (!doneActual && t.juicioId) {
       const j = juicios.find(j=>j.id===t.juicioId)
       if (j && !INACTIVOS.includes(j.estado) && j.tareas.filter(x=>!x.done).length===1) {
         alert("No puede eliminarse la última tarea de un juicio activo.")
         return
       }
     }
-    const done = !t.done
-    await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done})})
-    setPendientes(p=>({...p,[t.id]:{...p[t.id],done}}))
+    const nuevoDone = !doneActual
+    await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done:nuevoDone})})
+    // Solo guardar en cambios, NO tocar tareas ni vistaCongelada
+    setCambios(p=>({...p,[t.id]:{...p[t.id],done:nuevoDone}}))
   }
 
   const guardarEdicion = async (t:Tarea) => {
     await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,texto:editTexto,urgente:editUrgente,fecha:editFecha||null})})
-    setPendientes(p=>({...p,[t.id]:{...p[t.id],texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}}))
+    // Solo guardar en cambios, NO reordenar
+    setCambios(p=>({...p,[t.id]:{...p[t.id],texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}}))
     setEditId(null)
+  }
+
+  const actualizarVista = () => {
+    // Aplicar todos los cambios al estado real
+    const nuevasTareas = tareas.map(t=>cambios[t.id]?{...t,...cambios[t.id]}:t)
+    setTareas(nuevasTareas)
+    setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(t=>cambios[t.id]?{...t,...cambios[t.id]}:t)})))
+    // Nueva vista congelada: solo las activas con cambios aplicados, reordenadas
+    const nuevaVista = nuevasTareas
+      .filter(t=>!t.done && !(t.juicioId&&inactivosSet.has(t.juicioId)))
+      .sort((a,b)=>{
+        if(a.urgente&&!b.urgente)return -1; if(!a.urgente&&b.urgente)return 1
+        if(!a.fecha&&!b.fecha)return 0; if(!a.fecha)return 1; if(!b.fecha)return -1
+        return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()
+      })
+    setVistaCongelada(nuevaVista)
+    setCambios({})
   }
 
   const agregarTarea = async (juicioId:string) => {
@@ -172,15 +209,15 @@ export default function Home() {
     setJuicios(js=>js.map(j=>j.id===juicioId?{...j,pruebas:j.pruebas.filter(p=>p.id!==pruebaId)}:j))
   }
 
-  const tareaColor = (t:Tarea) => t.urgente?"#FFF0F0":esAtrasada(t)?"#F5F0FF":"#fff"
-  const tareaBorder = (t:Tarea) => t.urgente?"#E24B4A":esAtrasada(t)?"#9B59B6":"#e5e7eb"
+  const tareaColorFn = (t:Tarea) => t.urgente?"#FFF0F0":esAtrasada(t)?"#F5F0FF":"#fff"
+  const tareaBorderFn = (t:Tarea) => t.urgente?"#E24B4A":esAtrasada(t)?"#9B59B6":"#e5e7eb"
 
   const renderTarea = (t:Tarea, showJuicio=true) => {
     const isEdit = editId===t.id
-    const isDone = (pendientes[t.id]?.done ?? t.done) === true
+    const isDone = t.done  // t ya viene de vistaActual con cambios aplicados
     const nombre = t.juicio?.autos||t.tema
     return (
-      <div key={t.id} style={{...S.card,background:isDone?"#f9f9f9":tareaColor(t),borderColor:isDone?"#e5e7eb":tareaBorder(t),marginBottom:6,cursor:"default",opacity:isDone?0.7:1}}>
+      <div key={t.id} style={{...S.card,background:isDone?"#f9f9f9":tareaColorFn(t),borderColor:isDone?"#e5e7eb":tareaBorderFn(t),marginBottom:6,cursor:"default",opacity:isDone?0.65:1}}>
         <div style={S.cardHeader}>
           <div style={{...S.check,...(isDone?S.checkDone:{})}} onClick={()=>toggleDone(t)}>{isDone?"✓":""}</div>
           <div style={{flex:1,marginLeft:8}}>
@@ -193,7 +230,7 @@ export default function Home() {
                   <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
                     <input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente
                   </label>
-                  <button style={S.btnPrimary} onClick={()=>guardarEdicion(t)}>Actualizar</button>
+                  <button style={S.btnPrimary} onClick={()=>guardarEdicion(t)}>Guardar</button>
                   <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
                 </div>
               </div>
@@ -210,8 +247,7 @@ export default function Home() {
             {t.juicio?.id&&<button style={{...S.btnMini,color:"#378ADD",fontSize:11}} title="Ir al juicio"
               onClick={()=>{setPanel("juicios");setExpandido(t.juicio!.id);setTabActiva(p=>({...p,[t.juicio!.id]:"tareas"}))}}>⚖</button>}
             <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}}
-              onClick={()=>{fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,urgente:!t.urgente})});setTareas(ts=>ts.map(x=>x.id===t.id?{...x,urgente:!x.urgente}:x));setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,urgente:!x.urgente}:x)})))}}
-              title={t.urgente?"Quitar urgente":"Marcar urgente"}>!</button>
+              onClick={()=>{fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,urgente:!t.urgente})});setCambios(p=>({...p,[t.id]:{...p[t.id],urgente:!t.urgente}}))}}>!</button>
             <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente)}}>✎</button>
           </div>}
         </div>
@@ -219,12 +255,24 @@ export default function Home() {
     )
   }
 
-  const seccion = (label:string,items:Tarea[],color?:string) => items.length===0?null:(
-    <div key={label}>
-      <div style={{...S.sectionLabel,color:color||"#888"}}>{label}</div>
-      {items.map(t=>renderTarea(t))}
-    </div>
-  )
+  const seccion = (label:string, items:Tarea[], color?:string) => {
+    // Incluir en la sección las completadas recientes que pertenecen a ella
+    const completadasDeEsta = completadasRecientes.filter(t=>{
+      if(label==="URGENTES") return t.urgente&&(esAtrasada(t)||esHoy(t))
+      if(label==="ATRASADAS") return esAtrasada(t)&&!(t.urgente&&(esAtrasada(t)||esHoy(t)))
+      if(label==="HOY") return esHoy(t)&&!(t.urgente&&(esAtrasada(t)||esHoy(t)))
+      if(label==="PRÓXIMAS TAREAS") return esProxima(t)
+      return false
+    })
+    const todas = [...items,...completadasDeEsta]
+    if(todas.length===0) return null
+    return (
+      <div key={label}>
+        <div style={{...S.sectionLabel,color:color||"#888"}}>{label}</div>
+        {todas.map(t=>renderTarea(t))}
+      </div>
+    )
+  }
 
   const renderJuicio = (j:Juicio) => {
     const exp = expandido===j.id
@@ -362,7 +410,7 @@ export default function Home() {
   const tiposTarea = ["Juicio","Pro Bono","Docencia","Personales","General","Honorarios"]
   const juiciosFiltrados = juicios.filter(j=>filtroEstados.length===0?!INACTIVOS.includes(j.estado):filtroEstados.includes(j.estado)).sort((a,b)=>a.autos.localeCompare(b.autos,"es"))
   const honorariosPendientes = juicios.flatMap(j=>(j.honorarios||[]).filter(h=>h.estado!=="Pago total").map(h=>({...h,autos:j.autos})))
-  const tareasFiltradas = vistaBase.filter(t=>filtroTipos.length===0||filtroTipos.includes(t.tipo||"General"))
+  const tareasFiltradas = vistaActual.filter(t=>filtroTipos.length===0||filtroTipos.includes(t.tipo||"General"))
     .sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha&&!b.fecha)return 0;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
 
   const fld = (k:keyof JuicioForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(p=>({...p,[k]:e.target.value}))
@@ -405,7 +453,7 @@ export default function Home() {
           <div style={{fontWeight:500,fontSize:14}}>Agenda Legal</div>
           <div style={{fontSize:11,color:"#888"}}>{session.user?.name}</div>
         </div>
-        {[{id:"tareas",label:"Tareas",badge:atrasadas.length+vencenHoy.length+urgentesArriba.length},{id:"juicios",label:"Juicios",badge:juiciosFiltrados.length},{id:"probono",label:"Pro Bono",badge:null},{id:"docencia",label:"Docencia",badge:null},{id:"personales",label:"Personales",badge:null},{id:"honorarios",label:"Honorarios",badge:honorariosPendientes.length||null}].map(item=>(
+        {[{id:"tareas",label:"Tareas",badge:tareasActivas.length},{id:"juicios",label:"Juicios",badge:juiciosFiltrados.length},{id:"probono",label:"Pro Bono",badge:null},{id:"docencia",label:"Docencia",badge:null},{id:"personales",label:"Personales",badge:null},{id:"honorarios",label:"Honorarios",badge:honorariosPendientes.length||null}].map(item=>(
           <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>setPanel(item.id)}>
             {item.label}
             {item.badge?<span style={S.navBadge}>{item.badge}</span>:null}
@@ -422,13 +470,11 @@ export default function Home() {
         <div style={S.topbar}>
           <div style={{fontWeight:500,fontSize:15}}>{{tareas:"Tareas",juicios:"Juicios",probono:"Pro Bono",docencia:"Docencia",personales:"Personales",honorarios:"Honorarios"}[panel]}</div>
           <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-            {panel==="tareas"&&Object.keys(pendientes).length>0&&<button style={{...S.btnPrimary,fontSize:12}} onClick={()=>{
-      const nuevasTareas = tareas.map(t=>pendientes[t.id]?{...t,...pendientes[t.id]}:t)
-      setTareas(nuevasTareas)
-      setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(t=>pendientes[t.id]?{...t,...pendientes[t.id]}:t)})))
-      setSnapshot(nuevasTareas)
-      setPendientes({})
-    }}>Actualizar vista ({Object.keys(pendientes).length})</button>}
+            {panel==="tareas"&&hayPendientes&&(
+              <button style={{...S.btnPrimary,fontSize:12}} onClick={actualizarVista}>
+                Actualizar vista ({Object.keys(cambios).length})
+              </button>
+            )}
             {panel==="tareas"&&tiposTarea.map(tipo=>(
               <button key={tipo} style={{...S.btn,fontSize:11,padding:"3px 8px",background:filtroTipos.includes(tipo)?"#378ADD":"transparent",color:filtroTipos.includes(tipo)?"#fff":"#888",borderColor:filtroTipos.includes(tipo)?"#378ADD":"#e5e7eb"}}
                 onClick={()=>setFiltroTipos(p=>p.includes(tipo)?p.filter(x=>x!==tipo):[...p,tipo])}>{tipo}</button>
@@ -450,9 +496,9 @@ export default function Home() {
           {!loading&&panel==="tareas"&&(
             <div>
               <div style={S.metricsGrid}>
-                <div style={S.metric}><div style={{fontSize:22,fontWeight:500,color:"#378ADD"}}>{vencenHoy.length}</div><div style={S.metricLabel}>Vencen hoy</div></div>
+                <div style={S.metric}><div style={{fontSize:22,fontWeight:500,color:"#378ADD"}}>{tareasActivas.filter(t=>esHoy(t)).length}</div><div style={S.metricLabel}>Vencen hoy</div></div>
                 <div style={S.metric}><div style={{fontSize:22,fontWeight:500,color:"#E24B4A"}}>{tareasActivas.filter(t=>t.urgente).length}</div><div style={S.metricLabel}>Urgentes</div></div>
-                <div style={S.metric}><div style={{fontSize:22,fontWeight:500,color:"#9B59B6"}}>{atrasadas.length}</div><div style={S.metricLabel}>Atrasadas</div></div>
+                <div style={S.metric}><div style={{fontSize:22,fontWeight:500,color:"#9B59B6"}}>{tareasActivas.filter(t=>esAtrasada(t)).length}</div><div style={S.metricLabel}>Atrasadas</div></div>
                 <div style={S.metric}><div style={{fontSize:22,fontWeight:500}}>{tareasActivas.length}</div><div style={S.metricLabel}>Total activas</div></div>
               </div>
               {filtroTipos.length>0?(
@@ -462,7 +508,7 @@ export default function Home() {
                 {seccion("ATRASADAS",atrasadas,"#9B59B6")}
                 {seccion("HOY",vencenHoy,"#378ADD")}
                 {seccion("PRÓXIMAS TAREAS",proximas,"#555")}
-                {urgentesArriba.length===0&&atrasadas.length===0&&vencenHoy.length===0&&proximas.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
+                {vistaActual.filter(t=>!t.done).length===0&&completadasRecientes.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
               </>}
             </div>
           )}
