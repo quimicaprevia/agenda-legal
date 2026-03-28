@@ -129,9 +129,8 @@ export default function Home() {
     setSaving(false)
   }
 
-  const toggleDone = async (t:Tarea) => {
-    // Verificar última tarea activa de juicio activo
-    const doneActual = cambios[t.id]?.done ?? t.done
+  const toggleDone = (t:Tarea) => {
+    const doneActual = t.done
     if (!doneActual && t.juicioId) {
       const j = juicios.find(j=>j.id===t.juicioId)
       if (j && !INACTIVOS.includes(j.estado) && j.tareas.filter(x=>!x.done).length===1) {
@@ -140,10 +139,11 @@ export default function Home() {
       }
     }
     const nuevoDone = !doneActual
-    await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done:nuevoDone})})
-    // Marcar en vistaCongelada como done (sin sacarla de la lista) y en cambios
+    setTareas(ts=>ts.map(x=>x.id===t.id?{...x,done:nuevoDone}:x))
     setVistaCongelada(vs=>vs.map(x=>x.id===t.id?{...x,done:nuevoDone}:x))
+    setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,done:nuevoDone}:x)})))
     setCambios(p=>({...p,[t.id]:{...p[t.id],done:nuevoDone}}))
+    fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done:nuevoDone})})
   }
 
   const guardarEdicion = async (t:Tarea) => {
