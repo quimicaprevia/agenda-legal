@@ -8,4 +8,4 @@ RUN npx prisma generate
 RUN npm run build
 EXPOSE 8080
 ENV PORT=8080
-CMD npx prisma db push && npm start
+CMD npx prisma db push --accept-data-loss && npm start
