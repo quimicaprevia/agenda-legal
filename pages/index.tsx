@@ -44,6 +44,15 @@ export default function Home() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (expandido) {
+      setTimeout(() => {
+        const el = document.getElementById(`juicio-${expandido}`)
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+      }, 80)
+    }
+  }, [expandido])
+
+  useEffect(() => {
     if (session) {
       Promise.all([fetch("/api/juicios").then(r=>r.json()), fetch("/api/tareas").then(r=>r.json())])
         .then(([j,t]) => { setJuicios(Array.isArray(j)?j:[]); setTareas(Array.isArray(t)?t:[]); setLoading(false) })
@@ -222,7 +231,7 @@ export default function Home() {
     const activas = j.tareas.filter(t=>!t.done).sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
     const concluidas = j.tareas.filter(t=>t.done).slice(-5)
     return (
-      <div key={j.id} style={{...S.card,borderColor:exp?"#378ADD":"#e5e7eb"}}>
+      <div key={j.id} id={`juicio-${j.id}`} style={{...S.card,borderColor:exp?"#378ADD":"#e5e7eb"}}>
         <div style={S.cardHeader} onClick={()=>{setExpandido(exp?null:j.id);if(!tabActiva[j.id])setTabActiva(p=>({...p,[j.id]:"tareas"}))}}>
           <div style={{flex:1}}>
             <div style={S.cardTitle}>{j.autos}</div>
