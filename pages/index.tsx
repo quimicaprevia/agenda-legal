@@ -233,7 +233,7 @@ export default function Home() {
 
     return (
       <div key={t.id}
-        style={{display:"flex",width:"100%",background:bgColor,border:`0.5px solid ${borderColor}`,borderRadius:10,marginBottom:6,overflow:"hidden",opacity:isDone?0.65:1,cursor:"default"}}
+        style={{display:"flex",width:"100%",background:bgColor,border:`0.5px solid ${borderColor}`,borderRadius:10,marginBottom:6,overflow:"visible",opacity:isDone?0.65:1,cursor:"default"}}
         onClick={e=>{
           const target = e.target as HTMLElement
           if(target.closest("button")||target.closest("a")||target.closest(".check-box")||target.closest(".caratula")) return
