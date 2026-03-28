@@ -141,7 +141,8 @@ export default function Home() {
     }
     const nuevoDone = !doneActual
     await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done:nuevoDone})})
-    // Solo guardar en cambios, NO tocar tareas ni vistaCongelada
+    // Marcar en vistaCongelada como done (sin sacarla de la lista) y en cambios
+    setVistaCongelada(vs=>vs.map(x=>x.id===t.id?{...x,done:nuevoDone}:x))
     setCambios(p=>({...p,[t.id]:{...p[t.id],done:nuevoDone}}))
   }
 
@@ -254,11 +255,20 @@ export default function Home() {
   }
 
   const seccion = (label:string, items:Tarea[], color?:string) => {
-    if(items.length===0) return null
+    // Incluir en la sección las completadas recientes que pertenecen a ella
+    const completadasDeEsta = completadasRecientes.filter(t=>{
+      if(label==="URGENTES") return t.urgente&&(esAtrasada(t)||esHoy(t))
+      if(label==="ATRASADAS") return esAtrasada(t)&&!(t.urgente&&(esAtrasada(t)||esHoy(t)))
+      if(label==="HOY") return esHoy(t)&&!(t.urgente&&(esAtrasada(t)||esHoy(t)))
+      if(label==="PRÓXIMAS TAREAS") return esProxima(t)
+      return false
+    })
+    const todas = [...items,...completadasDeEsta]
+    if(todas.length===0) return null
     return (
       <div key={label}>
         <div style={{...S.sectionLabel,color:color||"#888"}}>{label}</div>
-        {items.map(t=>renderTarea(t))}
+        {todas.map(t=>renderTarea(t))}
       </div>
     )
   }
@@ -497,7 +507,7 @@ export default function Home() {
                 {seccion("ATRASADAS",atrasadas,"#9B59B6")}
                 {seccion("HOY",vencenHoy,"#378ADD")}
                 {seccion("PRÓXIMAS TAREAS",proximas,"#555")}
-                {vistaActual.filter(t=>!t.done).length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
+                {vistaActual.filter(t=>!t.done).length===0&&completadasRecientes.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
               </>}
             </div>
           )}
