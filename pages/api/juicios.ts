@@ -22,13 +22,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "POST") {
-    const juicio = await prisma.juicio.create({ data: { ...req.body, userId: user.id } })
+    const { autos, estado, nro, fuero, juzgado, secretaria, sala, advertencia, datosJuzgado, otraInfo, driveUrl, iaUrl, pjnUrl } = req.body
+    const juicio = await prisma.juicio.create({
+      data: {
+        autos, estado, nro, fuero, juzgado, secretaria, sala, advertencia,
+        datosJuzgado, otraInfo, driveUrl, iaUrl, pjnUrl,
+        tipo: "Juicio",
+        userId: user.id
+      },
+      include: { tareas: true, pruebas: true, honorarios: true, clientes: true }
+    })
     return res.json(juicio)
   }
 
   if (req.method === "PUT") {
-    const { id, ...data } = req.body
-    const juicio = await prisma.juicio.update({ where: { id }, data })
+    const { id, autos, estado, nro, fuero, juzgado, secretaria, sala, advertencia, datosJuzgado, otraInfo, driveUrl, iaUrl, pjnUrl } = req.body
+    const data: any = {}
+    if (autos !== undefined) data.autos = autos
+    if (estado !== undefined) data.estado = estado
+    if (nro !== undefined) data.nro = nro
+    if (fuero !== undefined) data.fuero = fuero
+    if (juzgado !== undefined) data.juzgado = juzgado
+    if (secretaria !== undefined) data.secretaria = secretaria
+    if (sala !== undefined) data.sala = sala
+    if (advertencia !== undefined) data.advertencia = advertencia
+    if (datosJuzgado !== undefined) data.datosJuzgado = datosJuzgado
+    if (otraInfo !== undefined) data.otraInfo = otraInfo
+    if (driveUrl !== undefined) data.driveUrl = driveUrl
+    if (iaUrl !== undefined) data.iaUrl = iaUrl
+    if (pjnUrl !== undefined) data.pjnUrl = pjnUrl
+    const juicio = await prisma.juicio.update({
+      where: { id },
+      data,
+      include: { tareas: true, pruebas: true, honorarios: true, clientes: true }
+    })
     return res.json(juicio)
   }
 
