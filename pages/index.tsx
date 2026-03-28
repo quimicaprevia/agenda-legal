@@ -214,7 +214,7 @@ export default function Home() {
 
   const renderTarea = (t:Tarea, showJuicio=true) => {
     const isEdit = editId===t.id
-    const isDone = t.done  // t ya viene de vistaActual con cambios aplicados
+    const isDone = cambios[t.id]?.done ?? t.done
     const nombre = t.juicio?.autos||t.tema
     return (
       <div key={t.id} style={{...S.card,background:isDone?"#f9f9f9":tareaColorFn(t),borderColor:isDone?"#e5e7eb":tareaBorderFn(t),marginBottom:6,cursor:"default",opacity:isDone?0.65:1}}>
