@@ -72,13 +72,18 @@ export default function Home() {
   const hoy = new Date(); hoy.setHours(0,0,0,0)
   const inactivosSet = new Set(juicios.filter(j=>INACTIVOS.includes(j.estado)).map(j=>j.id))
   const tareasActivas = tareas.filter(t=>!t.done && !(t.juicioId && inactivosSet.has(t.juicioId)))
+  const tareasConLocal = tareas.filter(t=>{
+    if(t.juicioId&&inactivosSet.has(t.juicioId))return false
+    if(t.done&&!completadasLocal.has(t.id))return false
+    return true
+  })
   const esAtrasada = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha)<hoy }
   const esHoy = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha).getTime()===hoy.getTime() }
   const esProxima = (t:Tarea) => !esAtrasada(t)&&!esHoy(t)
-  const urgentesArriba = tareasActivas.filter(t=>t.urgente&&(esAtrasada(t)||esHoy(t)))
-  const atrasadas = tareasActivas.filter(t=>esAtrasada(t)&&!urgentesArriba.includes(t))
-  const vencenHoy = tareasActivas.filter(t=>esHoy(t)&&!urgentesArriba.includes(t))
-  const proximas = tareasActivas.filter(t=>esProxima(t)&&!urgentesArriba.includes(t))
+  const urgentesArriba = tareasConLocal.filter(t=>!t.done&&t.urgente&&(esAtrasada(t)||esHoy(t)))
+  const atrasadas = tareasConLocal.filter(t=>!t.done&&esAtrasada(t)&&!urgentesArriba.includes(t))
+  const vencenHoy = tareasConLocal.filter(t=>!t.done&&esHoy(t)&&!urgentesArriba.includes(t))
+  const proximas = tareasConLocal.filter(t=>!t.done&&esProxima(t)&&!urgentesArriba.includes(t))
     .sort((a,b)=>{ if(a.urgente&&!b.urgente)return -1; if(!a.urgente&&b.urgente)return 1; if(!a.fecha&&!b.fecha)return 0; if(!a.fecha)return 1; if(!b.fecha)return -1; return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime() })
 
   const abrirNuevo = () => { setEditandoJuicio(null); setForm(FORM_VACIO); setModalOpen(true) }
@@ -358,11 +363,6 @@ export default function Home() {
   const tiposTarea = ["Juicio","Pro Bono","Docencia","Personales","General","Honorarios"]
   const juiciosFiltrados = juicios.filter(j=>filtroEstados.length===0?!INACTIVOS.includes(j.estado):filtroEstados.includes(j.estado)).sort((a,b)=>a.autos.localeCompare(b.autos,"es"))
   const honorariosPendientes = juicios.flatMap(j=>(j.honorarios||[]).filter(h=>h.estado!=="Pago total").map(h=>({...h,autos:j.autos})))
-  const tareasConLocal = tareas.filter(t=>{
-    if(t.juicioId&&inactivosSet.has(t.juicioId))return false
-    if(t.done&&!completadasLocal.has(t.id))return false
-    return true
-  })
   const tareasFiltradas = tareasConLocal.filter(t=>filtroTipos.length===0||filtroTipos.includes(t.tipo||"General"))
     .sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha&&!b.fecha)return 0;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
 
