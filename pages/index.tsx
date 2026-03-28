@@ -58,7 +58,7 @@ export default function Home() {
   }, [expandido])
 
   useEffect(() => {
-    if (session) {
+    if (session && loading) {
       Promise.all([fetch("/api/juicios").then(r=>r.json()), fetch("/api/tareas").then(r=>r.json())])
         .then(([j,t]) => {
           setJuicios(Array.isArray(j)?j:[])
@@ -129,8 +129,9 @@ export default function Home() {
     setSaving(false)
   }
 
-  const toggleDone = (t:Tarea) => {
-    const doneActual = t.done
+  const toggleDone = async (t:Tarea) => {
+    // Verificar última tarea activa de juicio activo
+    const doneActual = cambios[t.id]?.done ?? t.done
     if (!doneActual && t.juicioId) {
       const j = juicios.find(j=>j.id===t.juicioId)
       if (j && !INACTIVOS.includes(j.estado) && j.tareas.filter(x=>!x.done).length===1) {
@@ -139,11 +140,10 @@ export default function Home() {
       }
     }
     const nuevoDone = !doneActual
-    setTareas(ts=>ts.map(x=>x.id===t.id?{...x,done:nuevoDone}:x))
+    await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done:nuevoDone})})
+    // Marcar en vistaCongelada como done (sin sacarla de la lista) y en cambios
     setVistaCongelada(vs=>vs.map(x=>x.id===t.id?{...x,done:nuevoDone}:x))
-    setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,done:nuevoDone}:x)})))
     setCambios(p=>({...p,[t.id]:{...p[t.id],done:nuevoDone}}))
-    fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done:nuevoDone})})
   }
 
   const guardarEdicion = async (t:Tarea) => {
