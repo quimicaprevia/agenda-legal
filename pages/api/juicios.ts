@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const juicios = await prisma.juicio.findMany({
       where: { userId: user.id },
       include: { tareas: true, pruebas: true, honorarios: true },
-      orderBy: { updatedAt: "desc" },
+      orderBy: { createdAt: "desc" },
     })
     return res.json(juicios)
   }
