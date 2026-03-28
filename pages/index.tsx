@@ -107,7 +107,7 @@ export default function Home() {
     }
     const done = !t.done
     await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done})})
-    if (done) setCompletadasLocal(p=>new Set([...p,t.id]))
+    if (done) setCompletadasLocal(p=>{const n=new Set(p);n.add(t.id);return n})
     else setCompletadasLocal(p=>{const n=new Set(p);n.delete(t.id);return n})
     setTareas(ts=>ts.map(x=>x.id===t.id?{...x,done}:x))
     setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,done}:x)})))
