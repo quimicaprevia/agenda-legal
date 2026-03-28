@@ -38,6 +38,8 @@ export default function Home() {
   const [editUrgente, setEditUrgente] = useState(false)
   const [mostrarConc, setMostrarConc] = useState<Record<string,boolean>>({})
   const [completadasLocal, setCompletadasLocal] = useState<Set<string>>(new Set())
+  // Overrides locales: cambios que se muestran pero no reordenan hasta Actualizar
+  const [overridesLocales, setOverridesLocales] = useState<Record<string,Partial<Tarea>>>({})
   const [modalOpen, setModalOpen] = useState(false)
   const [editandoJuicio, setEditandoJuicio] = useState<Juicio|null>(null)
   const [form, setForm] = useState<JuicioForm>(FORM_VACIO)
@@ -72,10 +74,16 @@ export default function Home() {
   const hoy = new Date(); hoy.setHours(0,0,0,0)
   const inactivosSet = new Set(juicios.filter(j=>INACTIVOS.includes(j.estado)).map(j=>j.id))
   const tareasActivas = tareas.filter(t=>!t.done && !(t.juicioId && inactivosSet.has(t.juicioId)))
+  // Aplicar overrides visuales sin reordenar
   const tareasConLocal = tareas.filter(t=>{
     if(t.juicioId&&inactivosSet.has(t.juicioId))return false
-    if(t.done&&!completadasLocal.has(t.id))return false
+    const ov = overridesLocales[t.id]
+    const isDoneEfectivo = ov?.done ?? t.done
+    if(isDoneEfectivo&&!completadasLocal.has(t.id))return false
     return true
+  }).map(t=>{
+    const ov = overridesLocales[t.id]
+    return ov?{...t,...ov}:t
   })
   const esAtrasada = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha)<hoy }
   const esHoy = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha).getTime()===hoy.getTime() }
@@ -121,17 +129,21 @@ export default function Home() {
     }
     const done = !t.done
     await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done})})
-    if (done) setCompletadasLocal(p=>{const n=new Set(p);n.add(t.id);return n})
-    else setCompletadasLocal(p=>{const n=new Set(p);n.delete(t.id);return n})
-    setTareas(ts=>ts.map(x=>x.id===t.id?{...x,done}:x))
-    setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,done}:x)})))
+    if (done) {
+      setCompletadasLocal(p=>{const n=new Set(p);n.add(t.id);return n})
+      setOverridesLocales(p=>({...p,[t.id]:{done:true}}))
+    } else {
+      setCompletadasLocal(p=>{const n=new Set(p);n.delete(t.id);return n})
+      setOverridesLocales(p=>{const n={...p};delete n[t.id];return n})
+    }
+    // NO actualizamos tareas hasta Actualizar vista
   }
 
   const guardarEdicion = async (t:Tarea) => {
     await fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,texto:editTexto,urgente:editUrgente,fecha:editFecha||null})})
     const fecha = editFecha||undefined
-    setTareas(ts=>ts.map(x=>x.id===t.id?{...x,texto:editTexto,fecha,urgente:editUrgente}:x))
-    setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,texto:editTexto,fecha,urgente:editUrgente}:x)})))
+    // Guardar override local (no reordena hasta Actualizar vista)
+    setOverridesLocales(p=>({...p,[t.id]:{texto:editTexto,fecha,urgente:editUrgente}}))
     setEditId(null)
   }
 
@@ -178,7 +190,7 @@ export default function Home() {
 
   const renderTarea = (t:Tarea, showJuicio=true) => {
     const isEdit = editId===t.id
-    const isDone = t.done||completadasLocal.has(t.id)
+    const isDone = completadasLocal.has(t.id)||(overridesLocales[t.id]?.done??t.done)
     const nombre = t.juicio?.autos||t.tema
     return (
       <div key={t.id} style={{...S.card,background:isDone?"#f9f9f9":tareaColor(t),borderColor:isDone?"#e5e7eb":tareaBorder(t),marginBottom:6,cursor:"default",opacity:isDone?0.7:1}}>
@@ -423,7 +435,15 @@ export default function Home() {
         <div style={S.topbar}>
           <div style={{fontWeight:500,fontSize:15}}>{{tareas:"Tareas",juicios:"Juicios",probono:"Pro Bono",docencia:"Docencia",personales:"Personales",honorarios:"Honorarios"}[panel]}</div>
           <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-            {panel==="tareas"&&completadasLocal.size>0&&<button style={{...S.btnPrimary,fontSize:12}} onClick={()=>setCompletadasLocal(new Set())}>Actualizar vista ({completadasLocal.size})</button>}
+            {panel==="tareas"&&(completadasLocal.size>0||Object.keys(overridesLocales).length>0)&&<button style={{...S.btnPrimary,fontSize:12}} onClick={()=>{
+      setTareas(ts=>ts.map(t=>{
+        const ov=overridesLocales[t.id]
+        return ov?{...t,...ov}:t
+      }))
+      setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(t=>{const ov=overridesLocales[t.id];return ov?{...t,...ov}:t})})))
+      setCompletadasLocal(new Set())
+      setOverridesLocales({})
+    }}>Actualizar vista ({completadasLocal.size+Object.keys(overridesLocales).filter(id=>!completadasLocal.has(id)).length})</button>}
             {panel==="tareas"&&tiposTarea.map(tipo=>(
               <button key={tipo} style={{...S.btn,fontSize:11,padding:"3px 8px",background:filtroTipos.includes(tipo)?"#378ADD":"transparent",color:filtroTipos.includes(tipo)?"#fff":"#888",borderColor:filtroTipos.includes(tipo)?"#378ADD":"#e5e7eb"}}
                 onClick={()=>setFiltroTipos(p=>p.includes(tipo)?p.filter(x=>x!==tipo):[...p,tipo])}>{tipo}</button>
