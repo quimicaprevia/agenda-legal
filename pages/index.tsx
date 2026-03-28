@@ -79,6 +79,7 @@ export default function Home() {
   // Panel derecho (tareas)
   const [panelDerechoVisible, setPanelDerechoVisible] = useState(true)
   const [juicioSeleccionado, setJuicioSeleccionado]   = useState<string|null>(null)
+  const [tareaSeleccionada, setTareaSeleccionada]     = useState<string|null>(null)
 
   // Barra lateral juicios (estadísticas)
   const [statsVisible, setStatsVisible] = useState(true)
@@ -152,7 +153,7 @@ export default function Home() {
     .filter(t=>!(t.juicioId&&inactivosSet.has(t.juicioId)))
     .map(t=>({...t,...(cambios[t.id]||{})}))
 
-  const urgentesArriba = vistaActual.filter(t=>!t.done&&t.urgente)
+  const urgentesArriba = vistaActual.filter(t=>!t.done&&t.urgente&&(esAtrasada(t)||esHoy_(t)))
   const atrasadas      = vistaActual.filter(t=>!t.done&&esAtrasada(t)&&!urgentesArriba.find(u=>u.id===t.id))
   const vencenHoy      = vistaActual.filter(t=>!t.done&&esHoy_(t)&&!urgentesArriba.find(u=>u.id===t.id))
   const proximas       = vistaActual.filter(t=>!t.done&&esProxima(t)&&!urgentesArriba.find(u=>u.id===t.id))
@@ -434,7 +435,7 @@ export default function Home() {
         onClick={e=>{
           const tg=e.target as HTMLElement
           if(tg.closest("button")||tg.closest("a")||tg.closest(".check-box")||tg.closest(".caratula"))return
-          if(t.juicioId){setJuicioSeleccionado(t.juicioId);if(!panelDerechoVisible)setPanelDerechoVisible(true)}
+          if(t.juicioId){setJuicioSeleccionado(t.juicioId);setTareaSeleccionada(t.id);if(!panelDerechoVisible)setPanelDerechoVisible(true)}
         }}
       >
         <div style={{width:5,flexShrink:0,background:franja,borderRadius:"10px 0 0 10px"}}/>
@@ -519,7 +520,7 @@ export default function Home() {
         ))}
       </div>
     )
-    const otrasTareas = juicioPanel.tareas.filter(t=>!t.done)
+    const otrasTareas = juicioPanel.tareas.filter(t=>!t.done&&t.id!==tareaSeleccionada)
     return (
       <div style={{padding:"18px 16px"}}>
         <span style={{fontSize:11,color:"#aaa",cursor:"pointer",marginBottom:12,display:"inline-block"}} onClick={()=>setJuicioSeleccionado(null)}>← volver</span>
