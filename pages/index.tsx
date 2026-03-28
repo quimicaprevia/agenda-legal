@@ -125,7 +125,7 @@ export default function Home() {
   const agregarTareaJuicio = async (juicioId: string) => {
     const nt = nuevaTarea[juicioId] || { texto: "", fecha: "", urgente: false }
     if (!nt.texto.trim()) return
-    const body: any = { texto: nt.texto, juicioId, urgente: nt.urgente, tipo: "Juicio", userId: undefined }
+    const body: any = { texto: nt.texto, juicioId, urgente: nt.urgente, tipo: "Juicio" }
     if (nt.fecha) body.fecha = nt.fecha
     const res = await fetch("/api/tareas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
     if (!res.ok) { alert("Error al agregar tarea"); return }

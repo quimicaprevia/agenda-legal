@@ -15,19 +15,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "GET") {
     const tareas = await prisma.tarea.findMany({
       where: { userId: user.id },
-      include: { juicio: { select: { autos: true } } },
+      include: { juicio: { select: { autos: true, id: true } } },
       orderBy: [{ urgente: "desc" }, { fecha: "asc" }],
     })
     return res.json(tareas)
   }
 
   if (req.method === "POST") {
-    const tarea = await prisma.tarea.create({ data: { ...req.body, userId: user.id } })
+    const { texto, fecha, juicioId, urgente, tipo, tema } = req.body
+    const tarea = await prisma.tarea.create({
+      data: {
+        texto,
+        fecha: fecha ? new Date(fecha) : null,
+        juicioId: juicioId || null,
+        urgente: urgente || false,
+        tipo: tipo || null,
+        tema: tema || null,
+        userId: user.id,
+      },
+      include: { juicio: { select: { autos: true, id: true } } },
+    })
     return res.json(tarea)
   }
 
   if (req.method === "PUT") {
-    const { id, ...data } = req.body
+    const { id, texto, fecha, urgente, done, tipo, tema } = req.body
+    const data: any = {}
+    if (texto !== undefined) data.texto = texto
+    if (fecha !== undefined) data.fecha = fecha ? new Date(fecha) : null
+    if (urgente !== undefined) data.urgente = urgente
+    if (done !== undefined) data.done = done
+    if (tipo !== undefined) data.tipo = tipo
+    if (tema !== undefined) data.tema = tema
     const tarea = await prisma.tarea.update({ where: { id }, data })
     return res.json(tarea)
   }
