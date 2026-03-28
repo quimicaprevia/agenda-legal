@@ -310,6 +310,7 @@ export default function Home() {
     const t = await res.json()
     setJuicios(js=>js.map(j=>j.id===juicioId?{...j,tareas:[...j.tareas,t]}:j))
     setTareas(ts=>[...ts,t])
+    setVistaCongelada(vs=>[...vs,t])
     setNtMap(p=>({...p,[juicioId]:{texto:"",fecha:"",urgente:false}}))
   }
 
@@ -324,6 +325,7 @@ export default function Home() {
     const t = await res.json()
     setAsuntos(as=>as.map(a=>a.id===asuntoId?{...a,tareas:[...a.tareas,t]}:a))
     setTareas(ts=>[...ts,t])
+    setVistaCongelada(vs=>[...vs,t])
     setNtaMap(p=>({...p,[asuntoId]:{texto:"",fecha:"",urgente:false}}))
   }
 
