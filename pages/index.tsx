@@ -26,7 +26,9 @@ const TIPOS_PRUEBA   = ["Confesional","Informativa","Testimonial","Reconocimient
 const ESTADOS_PRUEBA = ["Ofrecida","En curso","Desistida","Finalizada"]
 const ESTADOS_HON    = ["Pendiente","Pago Parcial","Pago total"]
 const TIPOS_TAREA    = ["Casos y Juicios","Pro Bono","Docencia","Asuntos Personales"]
-const FRANJA: Record<string,string> = { "Casos y Juicios":"#378ADD","Pro Bono":"#3B6D11","Docencia":"#BA7517","Personales":"#9B59B6","Asuntos Personales":"#9B59B6" }
+const FRANJA: Record<string,string> = { "Casos y Juicios":"#7F77DD","Pro Bono":"#639922","Docencia":"#378ADD","Personales":"#E24B4A","Asuntos Personales":"#E24B4A","General":"#888" }
+const TOPBAR_BG: Record<string,string> = { tareas:"#F1EFE8", juicios:"#EEEDFE", probono:"#EAF3DE", docencia:"#E6F1FB", personales:"#FCEBEB", honorarios:"#FAEEDA" }
+const TOPBAR_TX: Record<string,string> = { tareas:"#444441", juicios:"#3C3489", probono:"#3B6D11", docencia:"#185FA5", personales:"#A32D2D", honorarios:"#633806" }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function parseFecha(s: string): Date { const [y,m,d]=s.split("T")[0].split("-").map(Number); return new Date(y,m-1,d) }
@@ -440,7 +442,7 @@ export default function Home() {
     const texto    = cambios[t.id]?.texto   ?? t.texto
     const isEdit   = editId===t.id
     const tipoLabel = t.tipo==="Juicio"?"Casos y Juicios":t.tipo==="Personales"?"Asuntos Personales":t.tipo||"Casos y Juicios"
-    const franja   = FRANJA[tipoLabel]||"#378ADD"
+    const franja   = FRANJA[tipoLabel]||FRANJA[t.tipo||""]||"#888"
     const bgColor  = isDone?"#f9f9f8":urgente?"#FFF0F0":esAtrasada({...t,fecha})?"#F5F0FF":"#fff"
     const bdrColor = isDone?"#e5e7eb":urgente?"#E24B4A":esAtrasada({...t,fecha})?"#C9A8F0":"#e5e7eb"
     const juicioInfo = t.juicioId ? juicios.find(j=>j.id===t.juicioId) : null
@@ -619,7 +621,9 @@ export default function Home() {
             {tab==="tareas"&&(
               <div>
                 {activas.map(t=>(
-                  <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":esAtrasada(t)?"#F5F0FF":"#fff",borderColor:t.urgente?"#E24B4A":esAtrasada(t)?"#C9A8F0":"#e5e7eb",marginBottom:6}}>
+                  <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":esAtrasada(t)?"#F5F0FF":"#fff",borderColor:t.urgente?"#E24B4A":esAtrasada(t)?"#C9A8F0":"#e5e7eb",marginBottom:6,display:"flex",overflow:"hidden"}}>
+                    <div style={{width:4,flexShrink:0,background:FRANJA["Casos y Juicios"],borderRadius:"12px 0 0 12px"}}/>
+                    <div style={{flex:1}}>
                     <div style={S.cardHeader}>
                       <div style={{...S.check,...(t.done?S.checkDone:{})}} onClick={()=>toggleDone(t)}>{t.done?"✓":""}</div>
                       <div style={{flex:1,marginLeft:8,fontSize:13}}>{t.texto}</div>
@@ -637,6 +641,7 @@ export default function Home() {
                         <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
                       </div>
                     )}
+                    </div>
                   </div>
                 ))}
                 {activas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin tareas activas</div>}
@@ -806,7 +811,9 @@ export default function Home() {
               {a.webUrl&&<a href={a.webUrl} target="_blank" rel="noopener noreferrer" style={{...S.btnMini,textDecoration:"none",fontSize:11,color:"#185FA5"}}>🌐 Web</a>}
             </div>
             {activas.map(t=>(
-              <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":"#fff",borderColor:t.urgente?"#E24B4A":"#e5e7eb",marginBottom:6}}>
+              <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":"#fff",borderColor:t.urgente?"#E24B4A":"#e5e7eb",marginBottom:6,display:"flex",overflow:"hidden"}}>
+                <div style={{width:4,flexShrink:0,background:FRANJA[tipoLabel]||"#888",borderRadius:"12px 0 0 12px"}}/>
+                <div style={{flex:1}}>
                 <div style={S.cardHeader}>
                   <div style={{...S.check,...(t.done?S.checkDone:{})}} onClick={()=>toggleDone(t)}>{t.done?"✓":""}</div>
                   <div style={{flex:1,marginLeft:8,fontSize:13}}>{t.texto}</div>
@@ -824,6 +831,7 @@ export default function Home() {
                     <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
                   </div>
                 )}
+                </div>
               </div>
             ))}
             {activas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin tareas activas</div>}
@@ -931,9 +939,14 @@ export default function Home() {
 
       {/* ── Sidebar ── */}
       <div style={S.sidebar}>
-        <div style={S.sidebarHeader}>
-          <div style={{fontWeight:500,fontSize:14}}>Agenda Legal</div>
-          <div style={{fontSize:11,color:"#888"}}>{session.user?.name}</div>
+        <div style={{padding:"16px",background:"#185FA5",borderBottom:"0.5px solid #0c447c",display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:38,height:38,borderRadius:"50%",background:"rgba(255,255,255,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:500,fontSize:14,color:"#fff",flexShrink:0}}>
+            {session.user?.name?.split(" ").map((n:string)=>n[0]).slice(0,2).join("").toUpperCase()||"AL"}
+          </div>
+          <div>
+            <div style={{fontWeight:500,fontSize:15,color:"#fff",lineHeight:1.2}}>Agenda Legal</div>
+            <div style={{fontSize:12,color:"#B5D4F4",marginTop:2}}>{session.user?.name}</div>
+          </div>
         </div>
 
         {/* Tareas — destacado en azul */}
@@ -981,8 +994,8 @@ export default function Home() {
       {/* ── Main ── */}
       <div style={S.main}>
         {/* Topbar */}
-        <div style={S.topbar}>
-          <div style={{fontWeight:500,fontSize:20,marginRight:12}}>
+        <div style={{...S.topbar,background:TOPBAR_BG[panel]||"#fff",borderBottom:`0.5px solid #e5e7eb`}}>
+          <div style={{fontWeight:500,fontSize:20,marginRight:12,color:TOPBAR_TX[panel]||"#111"}}>
             {{tareas:"Tareas",juicios:"Casos y Juicios",probono:"Pro Bono",docencia:"Docencia",personales:"Asuntos Personales",honorarios:"Honorarios"}[panel]}
           </div>
 
