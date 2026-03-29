@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from "react"
 type Prueba    = { id: string; tipo: string; contenido?: string; detalle?: string; estado: string }
 type Honorario = { id: string; clienteContraparte?: string; total?: string; pagado?: string; estado: string; observaciones?: string }
 type ClienteJuicio = { id: string; apellido: string; nombre: string; dni?: string; correo?: string; telefono?: string; domicilio?: string }
-type Tarea     = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; asuntoId?: string; juicio?: { autos: string; id: string } }
+type Tarea     = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; asuntoId?: string; juicio?: { autos: string; id: string }; info?: string; webUrl?: string }
 type Juicio    = { id: string; nro?: string; autos: string; estado: string; fuero?: string; juzgado?: string; secretaria?: string; sala?: string; advertencia?: string; driveUrl?: string; iaUrl?: string; datosJuzgado?: string; otraInfo?: string; tareas: Tarea[]; pruebas: Prueba[]; honorarios?: Honorario[]; clientes?: ClienteJuicio[] }
 type Asunto    = { id: string; nombre: string; tipo: string; estado: string; advertencia?: string; otraInfo?: string; driveUrl?: string; webUrl?: string; tareas: Tarea[] }
 
@@ -51,9 +51,9 @@ export default function Home() {
   const [cambios, setCambios]               = useState<Record<string,Partial<Tarea>>>({})
 
   // Expansión / tabs
-  const [expandido, setExpandido]   = useState<string|null>(null)
-  const [tabActiva, setTabActiva]   = useState<Record<string,string>>({})
-
+  const [expandido, setExpandido]         = useState<string|null>(null)
+  const [expandidoSet, setExpandidoSet]   = useState<Set<string>>(new Set())
+  const [tabActiva, setTabActiva]         = useState<Record<string,string>>({})
   // Forms inline (por id de juicio/asunto)
   const [ntMap, setNtMap] = useState<Record<string,{texto:string;fecha:string;urgente:boolean}>>({})
   const [npMap, setNpMap] = useState<Record<string,{tipo:string;contenido:string;detalle:string;estado:string}>>({})
@@ -102,7 +102,7 @@ export default function Home() {
   const [clienteSugerencias, setClienteSugerencias] = useState<Record<string,ClienteJuicio[]>>({})
 
   // Nueva tarea personal
-  const [ntPersonal, setNtPersonal] = useState({texto:"",fecha:"",urgente:false})
+  const [ntPersonal, setNtPersonal] = useState({texto:"",fecha:"",urgente:false,info:"",webUrl:""})
 
   useEffect(() => {
     if (expandido) {
@@ -127,6 +127,7 @@ export default function Home() {
         setAsuntos(as_)
         setTareas(ts)
         setVistaCongelada(ts.filter(x=>!x.done))
+        setExpandidoSet(new Set(as_.map((x:Asunto)=>x.id)))
         setLoading(false)
       }).catch(()=>setLoading(false))
     }
@@ -171,7 +172,11 @@ export default function Home() {
   const hayPendientes  = Object.keys(cambios).length > 0
 
   const tareasFiltradas = vistaActual
-    .filter(t=>(filtroTipos.length===0||filtroTipos.includes(t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios")))
+    .filter(t=>{
+      if(filtroTipos.length===0) return true
+      const label = t.tipo==="Juicio"?"Casos y Juicios":t.tipo==="Personales"?"Asuntos Personales":t.tipo||"Casos y Juicios"
+      return filtroTipos.includes(label)
+    })
     .sort((a,b)=>{
       if(a.urgente&&!b.urgente)return -1; if(!a.urgente&&b.urgente)return 1
       if(!a.fecha&&!b.fecha)return 0; if(!a.fecha)return 1; if(!b.fecha)return -1
@@ -297,6 +302,7 @@ export default function Home() {
         const res = await fetch("/api/asuntos",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(formAsunto)})
         const nuevo = await res.json()
         setAsuntos(as=>[{...nuevo,tareas:[]},...as])
+        setExpandidoSet(s=>{const n=new Set(s);n.add(nuevo.id);return n})
       }
       setModalAsuntoOpen(false)
     } catch { alert("Error al guardar") }
@@ -346,12 +352,14 @@ export default function Home() {
     if (!ntPersonal.texto.trim()) return
     const body:any={texto:ntPersonal.texto,urgente:ntPersonal.urgente,tipo:"Personales"}
     if(ntPersonal.fecha) body.fecha=ntPersonal.fecha
+    if(ntPersonal.info) body.info=ntPersonal.info
+    if(ntPersonal.webUrl) body.webUrl=ntPersonal.webUrl
     const res = await fetch("/api/tareas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
     if(!res.ok){alert("Error al agregar tarea");return}
     const t = await res.json()
     setTareas(ts=>[...ts,t])
     setVistaCongelada(vs=>[...vs,t])
-    setNtPersonal({texto:"",fecha:"",urgente:false})
+    setNtPersonal({texto:"",fecha:"",urgente:false,info:"",webUrl:""})
   }
 
   const eliminarTareaPersonal = async (tareaId:string) => {
@@ -586,7 +594,7 @@ export default function Home() {
       <div key={j.id} id={`item-${j.id}`} style={{...S.card,borderColor:exp?"#378ADD":"#e5e7eb"}}>
         <div style={S.cardHeader} onClick={()=>{setExpandido(exp?null:j.id);if(!tabActiva[j.id])setTabActiva(p=>({...p,[j.id]:"tareas"}))}}>
           <div style={{flex:1}}>
-            <div style={S.cardTitle}>{j.autos}</div>
+            <div style={{fontSize:14,fontWeight:500,lineHeight:1.35,color:FRANJA["Casos y Juicios"]}}>{j.autos}</div>
             <div style={S.cardMeta}>
               {primerCliente?`${primerCliente.apellido}, ${primerCliente.nombre}`:`${j.nro&&j.nro!=="Iniciar"?`Expte. ${j.nro} · `:""}${j.fuero||""}${j.juzgado?` · Juz. ${parseInt(j.juzgado)||j.juzgado}`:""}`}
             </div>
@@ -786,16 +794,17 @@ export default function Home() {
 
   // ─── RENDER: ASUNTO CARD (Pro Bono / Docencia) ────────────────────────────────
   const renderAsunto = (a:Asunto) => {
-    const exp    = expandido===a.id
+    const exp    = expandidoSet.has(a.id)
+    const toggleExp = () => setExpandidoSet(s=>{ const n=new Set(s); n.has(a.id)?n.delete(a.id):n.add(a.id); return n })
     const nt     = ntaMap[a.id]||{texto:"",fecha:"",urgente:false}
     const activas = a.tareas.filter(t=>!t.done).sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
     const concluidas = a.tareas.filter(t=>t.done).slice(-5)
     const tipoLabel = a.tipo==="probono"?"Pro Bono":"Docencia"
     return (
-      <div key={a.id} id={`item-${a.id}`} style={{...S.card,borderColor:exp?"#378ADD":"#e5e7eb"}}>
-        <div style={S.cardHeader} onClick={()=>setExpandido(exp?null:a.id)}>
+      <div key={a.id} id={`item-${a.id}`} style={{...S.card,borderColor:exp?FRANJA[tipoLabel]:"#e5e7eb"}}>
+        <div style={S.cardHeader} onClick={toggleExp}>
           <div style={{flex:1}}>
-            <div style={S.cardTitle}>{a.nombre}</div>
+            <div style={{fontSize:14,fontWeight:500,lineHeight:1.35,color:FRANJA[tipoLabel]}}>{a.nombre}</div>
             {a.advertencia&&<div style={{fontSize:11,color:"#A32D2D",marginTop:3,fontWeight:500}}>⚠ {a.advertencia}</div>}
           </div>
           <div style={{display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
@@ -875,7 +884,7 @@ export default function Home() {
 
   const asuntosProbono  = asuntos.filter(a=>a.tipo==="probono")
   const asuntosDocencia = asuntos.filter(a=>a.tipo==="docencia")
-  const tareasPersonales = tareas.filter(t=>t.tipo==="Personales"&&!t.done)
+  const tareasPersonales = vistaActual.filter(t=>t.tipo==="Personales"&&!t.done)
 
   // ─── RENDER PRINCIPAL ─────────────────────────────────────────────────────────
   return (
@@ -1103,11 +1112,23 @@ export default function Home() {
                 <div style={{marginBottom:14,display:"flex",gap:6,flexWrap:"wrap"}}>
                   <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva actividad personal..." value={ntPersonal.texto} onChange={e=>setNtPersonal(p=>({...p,texto:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&agregarTareaPersonal()}/>
                   <input type="date" style={{...S.input,flex:"1 1 140px"}} value={ntPersonal.fecha} onChange={e=>setNtPersonal(p=>({...p,fecha:e.target.value}))}/>
+                  <input style={{...S.input,flex:"3 1 200px"}} placeholder="Información adicional..." value={ntPersonal.info} onChange={e=>setNtPersonal(p=>({...p,info:e.target.value}))}/>
+                  <input style={{...S.input,flex:"2 1 160px"}} placeholder="Link web (https://...)" value={ntPersonal.webUrl} onChange={e=>setNtPersonal(p=>({...p,webUrl:e.target.value}))}/>
                   <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={ntPersonal.urgente} onChange={e=>setNtPersonal(p=>({...p,urgente:e.target.checked}))}/> Urgente</label>
                   <button style={S.btnPrimary} onClick={agregarTareaPersonal}>+ Agregar</button>
                 </div>
                 {tareasPersonales.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay actividades personales activas.</div>}
-                {tareasPersonales.map(t=>renderTarea(t))}
+                {tareasPersonales.map(t=>(
+                  <div key={t.id}>
+                    {renderTarea(t)}
+                    {(t.info||t.webUrl)&&(
+                      <div style={{marginTop:-4,marginBottom:6,padding:"6px 12px 8px 18px",background:"#fafafa",border:"0.5px solid #e5e7eb",borderTop:"none",borderRadius:"0 0 10px 10px",fontSize:12,color:"#555",display:"flex",gap:12,flexWrap:"wrap" as const}}>
+                        {t.info&&<span>{t.info}</span>}
+                        {t.webUrl&&<a href={t.webUrl} target="_blank" rel="noopener noreferrer" style={{color:"#378ADD",textDecoration:"none"}}>🌐 {t.webUrl}</a>}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 
