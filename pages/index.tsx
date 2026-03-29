@@ -25,8 +25,8 @@ const ESTADOS_TX: Record<string,string>   = { "Judicializado":"#185FA5","En prep
 const TIPOS_PRUEBA   = ["Confesional","Informativa","Testimonial","Reconocimiento","Pericial contable","Pericial informática","Pericial médica","Pericial técnica","Pericial (otra)"]
 const ESTADOS_PRUEBA = ["Ofrecida","En curso","Desistida","Finalizada"]
 const ESTADOS_HON    = ["Pendiente","Pago Parcial","Pago total"]
-const TIPOS_TAREA    = ["Casos y Juicios","Pro Bono","Docencia","Personales"]
-const FRANJA: Record<string,string> = { "Casos y Juicios":"#378ADD","Pro Bono":"#3B6D11","Docencia":"#BA7517","Personales":"#9B59B6" }
+const TIPOS_TAREA    = ["Casos y Juicios","Pro Bono","Docencia","Asuntos Personales"]
+const FRANJA: Record<string,string> = { "Casos y Juicios":"#378ADD","Pro Bono":"#3B6D11","Docencia":"#BA7517","Personales":"#9B59B6","Asuntos Personales":"#9B59B6" }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function parseFecha(s: string): Date { const [y,m,d]=s.split("T")[0].split("-").map(Number); return new Date(y,m-1,d) }
@@ -352,6 +352,14 @@ export default function Home() {
     setNtPersonal({texto:"",fecha:"",urgente:false})
   }
 
+  const eliminarTareaPersonal = async (tareaId:string) => {
+    if(!confirm("¿Eliminar esta actividad personal?")) return
+    await fetch("/api/tareas",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:tareaId})})
+    setTareas(ts=>ts.filter(t=>t.id!==tareaId))
+    setVistaCongelada(vs=>vs.filter(t=>t.id!==tareaId))
+    setCambios(p=>{const c={...p};delete c[tareaId];return c})
+  }
+
   // ─── PRUEBAS ─────────────────────────────────────────────────────────────────
   const agregarPrueba = async (juicioId:string) => {
     const np = npMap[juicioId]||{tipo:"",contenido:"",detalle:"",estado:"Ofrecida"}
@@ -431,7 +439,7 @@ export default function Home() {
     const fecha    = cambios[t.id]?.fecha   ?? t.fecha
     const texto    = cambios[t.id]?.texto   ?? t.texto
     const isEdit   = editId===t.id
-    const tipoLabel = t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios"
+    const tipoLabel = t.tipo==="Juicio"?"Casos y Juicios":t.tipo==="Personales"?"Asuntos Personales":t.tipo||"Casos y Juicios"
     const franja   = FRANJA[tipoLabel]||"#378ADD"
     const bgColor  = isDone?"#f9f9f8":urgente?"#FFF0F0":esAtrasada({...t,fecha})?"#F5F0FF":"#fff"
     const bdrColor = isDone?"#e5e7eb":urgente?"#E24B4A":esAtrasada({...t,fecha})?"#C9A8F0":"#e5e7eb"
@@ -933,7 +941,7 @@ export default function Home() {
           {id:"juicios",     label:"Casos y Juicios", badge:juiciosFiltrados.length},
           {id:"probono",     label:"Pro Bono",         badge:asuntosProbono.length||null},
           {id:"docencia",    label:"Docencia",         badge:asuntosDocencia.length||null},
-          {id:"personales",  label:"Personales",       badge:tareasPersonales.length||null},
+          {id:"personales",  label:"Asuntos Personales", badge:tareasPersonales.length||null},
         ].map(item=>(
           <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>setPanel(item.id)}>
             {item.label}
@@ -966,7 +974,7 @@ export default function Home() {
         {/* Topbar */}
         <div style={S.topbar}>
           <div style={{fontWeight:500,fontSize:20,marginRight:12}}>
-            {{tareas:"Tareas",juicios:"Casos y Juicios",probono:"Pro Bono",docencia:"Docencia",personales:"Personales",honorarios:"Honorarios"}[panel]}
+            {{tareas:"Tareas",juicios:"Casos y Juicios",probono:"Pro Bono",docencia:"Docencia",personales:"Asuntos Personales",honorarios:"Honorarios"}[panel]}
           </div>
 
           {panel==="tareas"&&<>
@@ -1077,7 +1085,16 @@ export default function Home() {
                   <button style={S.btnPrimary} onClick={agregarTareaPersonal}>+ Agregar</button>
                 </div>
                 {tareasPersonales.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay actividades personales activas.</div>}
-                {tareasPersonales.map(t=>renderTarea(t))}
+                {tareasPersonales.map(t=>(
+                  <div key={t.id} style={{position:"relative"}}>
+                    {renderTarea(t)}
+                    <button
+                      style={{position:"absolute",top:8,right:8,fontSize:11,padding:"2px 7px",border:"0.5px solid #f5c5c5",borderRadius:6,cursor:"pointer",background:"#fff5f5",color:"#E24B4A",zIndex:1}}
+                      onClick={e=>{e.stopPropagation();eliminarTareaPersonal(t.id)}}
+                      title="Eliminar"
+                    >✕</button>
+                  </div>
+                ))}
               </div>
             )}
 
