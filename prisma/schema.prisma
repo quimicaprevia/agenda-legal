@@ -40,6 +40,8 @@ model Juicio {
   datosJuzgado    String?
   datosContacto   String?
   otraInfo        String?
+  compartidoCon   String?
+  categoria       String?
   createdAt       DateTime        @default(now())
   tareas          Tarea[]
   pruebas         Prueba[]
@@ -61,6 +63,8 @@ model Tarea {
   done      Boolean   @default(false)
   tipo      String?
   tema      String?
+  info      String?
+  webUrl    String?
   createdAt DateTime  @default(now())
 }
 

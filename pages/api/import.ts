@@ -1,8 +1,6 @@
-// pages/api/import.ts
-// Importa datos desde el Excel de Facundo a la base de datos
-// Borra TODO primero y reimporta. Usar solo una vez.
-
 import type { NextApiRequest, NextApiResponse } from "next"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "./auth/[...nextauth]"
 import { PrismaClient } from "@prisma/client"
 import * as XLSX from "xlsx"
 import path from "path"
@@ -10,7 +8,6 @@ import fs from "fs"
 
 const prisma = new PrismaClient()
 
-// Normaliza estados del Excel al formato de la app
 function normalizarEstado(estado: string | null | undefined): string {
   if (!estado) return "Judicializado"
   const mapa: Record<string, string> = {
@@ -22,30 +19,27 @@ function normalizarEstado(estado: string | null | undefined): string {
     "Mediacion":     "Mediación",
     "Mediación":     "Mediación",
     "Inicio":        "Inicio",
-    "Suspendido":    "Renunciado",  // mapear Suspendido a Renunciado
+    "Suspendido":    "Renunciado",
   }
   return mapa[estado.trim()] || "Judicializado"
 }
 
 function toStr(val: any): string {
   if (val === null || val === undefined) return ""
-  return String(val).trim()
+  const s = String(val).trim()
+  return s === "nan" || s === "NaN" || s === "NaT" ? "" : s
 }
 
-function toFecha(val: any): string {
-  // Hoy como fallback
-  const hoy = new Date().toISOString().split("T")[0]
+function toFecha(val: any): Date {
+  const hoy = new Date()
   if (!val || val === "NaT" || val === "NaN") return hoy
   try {
-    // Excel puede devolver un número serial o un string
     if (typeof val === "number") {
-      // número serial de Excel
       const d = XLSX.SSF.parse_date_code(val)
-      return `${d.y}-${String(d.m).padStart(2,"0")}-${String(d.d).padStart(2,"0")}`
+      return new Date(d.y, d.m - 1, d.d)
     }
     const d = new Date(val)
-    if (isNaN(d.getTime())) return hoy
-    return d.toISOString().split("T")[0]
+    return isNaN(d.getTime()) ? hoy : d
   } catch {
     return hoy
   }
@@ -54,77 +48,68 @@ function toFecha(val: any): string {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).end()
 
+  const session = await getServerSession(req, res, authOptions)
+  if (!session?.user?.email) return res.status(401).json({ error: "No autenticado" })
+
+  const user = await prisma.user.findUnique({ where: { email: session.user.email } })
+  if (!user) return res.status(401).json({ error: "Usuario no encontrado" })
+  const userId = user.id
+
   try {
-    // Buscar el Excel subido — debe estar en public/import.xlsx
     const xlsxPath = path.join(process.cwd(), "public", "import.xlsx")
     if (!fs.existsSync(xlsxPath)) {
       return res.status(400).json({ error: "No se encontró public/import.xlsx" })
     }
 
     const workbook = XLSX.readFile(xlsxPath)
+    const sheetDocencia = XLSX.utils.sheet_to_json(workbook.Sheets["Docencia"] || {})
+    const sheetPersonal = XLSX.utils.sheet_to_json(workbook.Sheets["Personales"] || {})
+    const sheetJuicios  = XLSX.utils.sheet_to_json(workbook.Sheets["Juicios"] || {})
+    const sheetProBono  = XLSX.utils.sheet_to_json(workbook.Sheets["Pro Bono"] || {})
 
-    const sheetDocencia  = XLSX.utils.sheet_to_json(workbook.Sheets["Docencia"]  || workbook.Sheets[workbook.SheetNames[0]])
-    const sheetPersonal  = XLSX.utils.sheet_to_json(workbook.Sheets["Personales"] || workbook.Sheets[workbook.SheetNames[1]])
-    const sheetJuicios   = XLSX.utils.sheet_to_json(workbook.Sheets["Juicios"]   || workbook.Sheets[workbook.SheetNames[2]])
-    const sheetProBono   = XLSX.utils.sheet_to_json(workbook.Sheets["Pro Bono"]  || workbook.Sheets[workbook.SheetNames[3]])
-
-    // ── Borrar todo en orden correcto (FK) ──────────────────────────────────
-    await prisma.tarea.deleteMany()
-    await prisma.prueba.deleteMany().catch(()=>{})
-    await prisma.honorario.deleteMany().catch(()=>{})
-    await prisma.clienteJuicio.deleteMany().catch(()=>{})
-    await prisma.juicio.deleteMany()
-    await prisma.asunto.deleteMany()
+    await prisma.tarea.deleteMany({ where: { userId } })
+    await prisma.prueba.deleteMany({ where: { juicio: { userId } } })
+    await prisma.honorario.deleteMany({ where: { juicio: { userId } } })
+    await prisma.clienteJuicio.deleteMany({ where: { userId } })
+    await prisma.juicio.deleteMany({ where: { userId } })
+    await prisma.asunto.deleteMany({ where: { userId } })
 
     let countJuicios = 0, countAsuntos = 0, countTareas = 0
 
-    // ── JUICIOS ─────────────────────────────────────────────────────────────
     for (const row of sheetJuicios as any[]) {
       const autos = toStr(row["AUTOS"])
-      if (!autos || autos === "nan") continue  // saltar fila vacía
-
-      const estado = normalizarEstado(toStr(row["ESTADO"]))
-      const nro    = toStr(row["Nro Expte."])
-      const fuero  = toStr(row["Fuero"])
-      const juzgado = toStr(row["Juz"])
-      const secretaria = toStr(row["Sec"])
-      const sala   = toStr(row["Sala"])
+      if (!autos) continue
+      const estado   = normalizarEstado(toStr(row["ESTADO"]))
+      const nro      = toStr(row["Nro Expte."])
+      const fuero    = toStr(row["Fuero"])
+      const juzgado  = toStr(row["Juz"])
+      const sec      = toStr(row["Sec"])
+      const sala     = toStr(row["Sala"])
       const otraInfo = toStr(row["OTRA INFORMACION"])
-      const tarea  = toStr(row["TAREAS"])
-      const fecha  = toFecha(row["FECHA"])
+      const tarea    = toStr(row["TAREAS"])
+      const fecha    = toFecha(row["FECHA"])
 
       const juicio = await prisma.juicio.create({
         data: {
-          autos,
-          estado,
+          userId, tipo: "Propio", autos, estado,
           nro: nro || undefined,
           fuero: fuero || undefined,
-          juzgado: juzgado && juzgado !== "nan" ? juzgado : undefined,
-          secretaria: secretaria && secretaria !== "nan" ? secretaria : undefined,
-          sala: sala && sala !== "nan" ? sala : undefined,
+          juzgado: juzgado || undefined,
+          secretaria: sec || undefined,
+          sala: sala || undefined,
           otraInfo: otraInfo || undefined,
         }
       })
       countJuicios++
 
-      // Crear tarea si hay texto
-      if (tarea && tarea !== "nan") {
+      if (tarea) {
         await prisma.tarea.create({
-          data: {
-            texto: tarea,
-            fecha: new Date(fecha),
-            urgente: false,
-            done: false,
-            tipo: "Juicio",
-            juicioId: juicio.id,
-          }
+          data: { userId, texto: tarea, fecha, urgente: false, done: false, tipo: "Juicio", juicioId: juicio.id }
         })
         countTareas++
       }
     }
 
-    // ── DOCENCIA ────────────────────────────────────────────────────────────
-    // Agrupar tareas por TIPO (= nombre del asunto)
     const docenciaMap: Record<string, any[]> = {}
     for (const row of sheetDocencia as any[]) {
       const tipo = toStr(row["TIPO"])
@@ -132,42 +117,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!docenciaMap[tipo]) docenciaMap[tipo] = []
       docenciaMap[tipo].push(row)
     }
-
     for (const [nombre, rows] of Object.entries(docenciaMap)) {
+      const otraInfo = rows.map(r => toStr(r["OTRA INFORMACION"])).find(v => v) || undefined
+      const driveUrl = rows.map(r => toStr(r["Link Drive"])).find(v => v) || undefined
       const asunto = await prisma.asunto.create({
-        data: { nombre, tipo: "docencia", estado: "Abierta" }
+        data: { userId, nombre, tipo: "docencia", estado: "Abierta", otraInfo, driveUrl }
       })
       countAsuntos++
-
       for (const row of rows) {
         const tarea = toStr(row["TAREA"])
-        if (!tarea || tarea === "nan") continue
-        const otraInfo = toStr(row["OTRA INFORMACION"])
-        const driveUrl = toStr(row["Link Drive"])
+        if (!tarea) continue
         await prisma.tarea.create({
-          data: {
-            texto: tarea,
-            fecha: new Date(toFecha(row["FECHA"])),
-            urgente: false,
-            done: false,
-            tipo: "Docencia",
-            asuntoId: asunto.id,
-            // otraInfo y driveUrl van al asunto, no a la tarea — los ignoramos aquí
-          }
+          data: { userId, texto: tarea, fecha: toFecha(row["FECHA"]), urgente: false, done: false, tipo: "Docencia", asuntoId: asunto.id }
         })
         countTareas++
-
-        // Si el asunto no tiene otraInfo aún, lo actualizamos
-        if (otraInfo && otraInfo !== "nan") {
-          await prisma.asunto.update({
-            where: { id: asunto.id },
-            data: { otraInfo, driveUrl: driveUrl && driveUrl !== "nan" ? driveUrl : undefined }
-          })
-        }
       }
     }
 
-    // ── PRO BONO ────────────────────────────────────────────────────────────
     const proBonoMap: Record<string, any[]> = {}
     for (const row of sheetProBono as any[]) {
       const tipo = toStr(row["TIPO"])
@@ -175,76 +141,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!proBonoMap[tipo]) proBonoMap[tipo] = []
       proBonoMap[tipo].push(row)
     }
-
     for (const [nombre, rows] of Object.entries(proBonoMap)) {
-      // Advertencia: tomar la primera no vacía
-      const advertencia = rows.map(r => toStr(r["ADVERTENCIA"])).find(a => a && a !== "nan") || undefined
-
+      const advertencia = rows.map(r => toStr(r["ADVERTENCIA"])).find(v => v) || undefined
+      const otraInfo    = rows.map(r => toStr(r["OTRA INFORMACION"])).find(v => v) || undefined
       const asunto = await prisma.asunto.create({
-        data: {
-          nombre,
-          tipo: "probono",
-          estado: "Abierta",
-          advertencia: advertencia || undefined,
-        }
+        data: { userId, nombre, tipo: "probono", estado: "Abierta", advertencia, otraInfo }
       })
       countAsuntos++
-
       for (const row of rows) {
         const tarea = toStr(row["TAREA"])
-        if (!tarea || tarea === "nan") continue
-        const otraInfo = toStr(row["OTRA INFORMACION"])
+        if (!tarea) continue
         await prisma.tarea.create({
-          data: {
-            texto: tarea,
-            fecha: new Date(toFecha(row["FECHA"])),
-            urgente: false,
-            done: false,
-            tipo: "Pro Bono",
-            asuntoId: asunto.id,
-          }
+          data: { userId, texto: tarea, fecha: toFecha(row["FECHA"]), urgente: false, done: false, tipo: "Pro Bono", asuntoId: asunto.id }
         })
         countTareas++
-
-        if (otraInfo && otraInfo !== "nan") {
-          await prisma.asunto.update({
-            where: { id: asunto.id },
-            data: { otraInfo }
-          })
-        }
       }
     }
 
-    // ── PERSONALES ──────────────────────────────────────────────────────────
     for (const row of sheetPersonal as any[]) {
       const tarea = toStr(row["TAREA"])
-      if (!tarea || tarea === "nan") continue
-      const detalle = toStr(row["DETALLE"])
-      // Separar si detalle tiene una URL
+      if (!tarea) continue
+      const detalle  = toStr(row["DETALLE"])
       const urlMatch = detalle.match(/https?:\/\/\S+/)
-      const webUrl = urlMatch ? urlMatch[0] : undefined
-      const info   = detalle && detalle !== "nan" ? detalle.replace(urlMatch?.[0] || "", "").trim() : undefined
-
+      const webUrl   = urlMatch ? urlMatch[0] : undefined
+      const info     = detalle ? detalle.replace(urlMatch?.[0] || "", "").replace(/\\n/g, " ").trim() || undefined : undefined
       await prisma.tarea.create({
-        data: {
-          texto: tarea,
-          fecha: new Date(toFecha(row["FECHA"])),
-          urgente: false,
-          done: false,
-          tipo: "Personales",
-          info: info || undefined,
-          webUrl: webUrl || undefined,
-        }
+        data: { userId, texto: tarea, fecha: toFecha(row["FECHA"]), urgente: false, done: false, tipo: "Personales", info, webUrl }
       })
       countTareas++
     }
 
-    return res.status(200).json({
-      ok: true,
-      juicios: countJuicios,
-      asuntos: countAsuntos,
-      tareas: countTareas,
-    })
+    return res.status(200).json({ ok: true, juicios: countJuicios, asuntos: countAsuntos, tareas: countTareas })
 
   } catch (err: any) {
     console.error("Import error:", err)
