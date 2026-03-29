@@ -501,6 +501,7 @@ export default function Home() {
                 </div>
               )}
               {!isDone&&<button style={{...S.btnUrgente,...(urgente?{background:"#E24B4A",color:"#fff"}:{})}} onClick={e=>{e.stopPropagation();toggleUrgente(t)}}>! urgente</button>}
+              {!isDone&&t.tipo==="Personales"&&<button style={{fontSize:12,padding:"4px 10px",border:"0.5px solid #f5c5c5",borderRadius:6,cursor:"pointer",background:"#fff5f5",color:"#E24B4A",whiteSpace:"nowrap"}} onClick={e=>{e.stopPropagation();eliminarTareaPersonal(t.id)}}>✕ eliminar</button>}
             </div>
           )}
         </div>
@@ -935,9 +936,18 @@ export default function Home() {
           <div style={{fontSize:11,color:"#888"}}>{session.user?.name}</div>
         </div>
 
-        {/* Nav principal */}
+        {/* Tareas — destacado en azul */}
+        <div
+          style={{padding:"8px 14px",cursor:"pointer",fontSize:14,fontWeight:500,color: panel==="tareas"?"#185FA5":"#378ADD",borderLeft: panel==="tareas"?"2px solid #378ADD":"2px solid transparent",background: panel==="tareas"?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+          onClick={()=>setPanel("tareas")}
+        >
+          Tareas
+          {tareasActivas.length>0&&<span style={S.navBadge}>{tareasActivas.length}</span>}
+        </div>
+        <div style={{height:8}}/>
+
+        {/* Menús principales — negrita negra */}
         {[
-          {id:"tareas",      label:"Tareas",          badge:tareasActivas.length},
           {id:"juicios",     label:"Casos y Juicios", badge:juiciosFiltrados.length},
           {id:"probono",     label:"Pro Bono",         badge:asuntosProbono.length||null},
           {id:"docencia",    label:"Docencia",         badge:asuntosDocencia.length||null},
@@ -951,15 +961,14 @@ export default function Home() {
 
         <div style={{height:1,background:"#e5e7eb",margin:"6px 14px"}}/>
 
-        {/* Honorarios y otros */}
-        {[
-          {id:"honorarios",  label:"Honorarios",      badge:honorariosPendientes.length||null},
-        ].map(item=>(
-          <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>setPanel(item.id)}>
-            {item.label}
-            {item.badge!=null&&item.badge>0?<span style={S.navBadge}>{item.badge}</span>:null}
-          </div>
-        ))}
+        {/* Honorarios — estilo gris original */}
+        <div
+          style={{padding:"7px 14px",cursor:"pointer",fontSize:13,color: panel==="honorarios"?"#111":"#666",fontWeight: panel==="honorarios"?500:400,borderLeft: panel==="honorarios"?"2px solid #378ADD":"2px solid transparent",background: panel==="honorarios"?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+          onClick={()=>setPanel("honorarios")}
+        >
+          Honorarios
+          {honorariosPendientes.length>0&&<span style={S.navBadge}>{honorariosPendientes.length}</span>}
+        </div>
 
         <div style={{flex:1}}/>
         <div style={{padding:"10px 14px",borderTop:"0.5px solid #e5e7eb",display:"flex",flexDirection:"column",gap:6}}>
@@ -1085,16 +1094,7 @@ export default function Home() {
                   <button style={S.btnPrimary} onClick={agregarTareaPersonal}>+ Agregar</button>
                 </div>
                 {tareasPersonales.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay actividades personales activas.</div>}
-                {tareasPersonales.map(t=>(
-                  <div key={t.id} style={{position:"relative"}}>
-                    {renderTarea(t)}
-                    <button
-                      style={{position:"absolute",top:8,right:8,fontSize:11,padding:"2px 7px",border:"0.5px solid #f5c5c5",borderRadius:6,cursor:"pointer",background:"#fff5f5",color:"#E24B4A",zIndex:1}}
-                      onClick={e=>{e.stopPropagation();eliminarTareaPersonal(t.id)}}
-                      title="Eliminar"
-                    >✕</button>
-                  </div>
-                ))}
+                {tareasPersonales.map(t=>renderTarea(t))}
               </div>
             )}
 
@@ -1132,8 +1132,8 @@ const S: Record<string,React.CSSProperties> = {
   app:         {display:"flex",height:"100vh",fontFamily:"system-ui, sans-serif",fontSize:14,color:"#111"},
   sidebar:     {width:220,background:"#f9f9f8",borderRight:"0.5px solid #e5e7eb",display:"flex",flexDirection:"column",flexShrink:0},
   sidebarHeader:{padding:"14px 14px 10px",borderBottom:"0.5px solid #e5e7eb"},
-  navItem:     {padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#666",borderLeft:"2px solid transparent",display:"flex",justifyContent:"space-between",alignItems:"center"},
-  navItemActive:{background:"#fff",color:"#111",borderLeft:"2px solid #378ADD",fontWeight:500},
+  navItem:     {padding:"7px 14px",cursor:"pointer",fontSize:13,fontWeight:500,color:"#111",borderLeft:"2px solid transparent",display:"flex",justifyContent:"space-between",alignItems:"center"},
+  navItemActive:{background:"#fff",color:"#185FA5",borderLeft:"2px solid #378ADD",fontWeight:500},
   navBadge:    {background:"#E6F1FB",color:"#185FA5",fontSize:11,padding:"1px 6px",borderRadius:10},
   main:        {flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0},
   topbar:      {padding:"12px 20px",borderBottom:"0.5px solid #e5e7eb",background:"#fff",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flexShrink:0},
