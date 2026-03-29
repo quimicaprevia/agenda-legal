@@ -511,7 +511,7 @@ export default function Home() {
                 </div>
               )}
               {!isDone&&<button style={{...S.btnUrgente,...(urgente?{background:"#E24B4A",color:"#fff"}:{})}} onClick={e=>{e.stopPropagation();toggleUrgente(t)}}>! urgente</button>}
-              {!isDone&&t.tipo==="Personales"&&<button style={{fontSize:12,padding:"4px 10px",border:"0.5px solid #f5c5c5",borderRadius:6,cursor:"pointer",background:"#fff5f5",color:"#E24B4A",whiteSpace:"nowrap"}} onClick={e=>{e.stopPropagation();eliminarTareaPersonal(t.id)}}>✕ eliminar</button>}
+              {!isDone&&t.tipo==="Personales"&&<button style={{...S.btnMini,color:"#E24B4A"}} onClick={e=>{e.stopPropagation();eliminarTareaPersonal(t.id)}}>✕</button>}
             </div>
           )}
         </div>
