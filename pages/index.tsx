@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from "react"
 type Prueba    = { id: string; tipo: string; contenido?: string; detalle?: string; estado: string }
 type Honorario = { id: string; clienteContraparte?: string; total?: string; pagado?: string; estado: string; observaciones?: string }
 type ClienteJuicio = { id: string; apellido: string; nombre: string; dni?: string; correo?: string; telefono?: string; domicilio?: string }
-type Tarea     = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; asuntoId?: string; juicio?: { autos: string; id: string }; info?: string; webUrl?: string }
+type Tarea     = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; asuntoId?: string; juicio?: { autos: string; id: string }; asunto?: { nombre: string; id: string }; info?: string; webUrl?: string }
 type Juicio    = { id: string; nro?: string; autos: string; estado: string; fuero?: string; juzgado?: string; secretaria?: string; sala?: string; advertencia?: string; driveUrl?: string; iaUrl?: string; datosJuzgado?: string; otraInfo?: string; compartidoCon?: string; categoria?: string; tareas: Tarea[]; pruebas: Prueba[]; honorarios?: Honorario[]; clientes?: ClienteJuicio[] }
 type Asunto    = { id: string; nombre: string; tipo: string; estado: string; advertencia?: string; otraInfo?: string; driveUrl?: string; webUrl?: string; tareas: Tarea[] }
 
@@ -131,8 +131,12 @@ export default function Home() {
         const as_ = Array.isArray(a)?a:[]
         setJuicios(js)
         setAsuntos(as_)
-        setTareas(ts)
-        setVistaCongelada(ts.filter(x=>!x.done))
+        // Poblar t.asunto para tareas que tienen asuntoId
+        const asuntoMap: Record<string,{nombre:string;id:string}> = {}
+        as_.forEach((a:Asunto) => { asuntoMap[a.id] = {nombre:a.nombre, id:a.id} })
+        const tsConAsunto = ts.map((t:Tarea) => t.asuntoId && asuntoMap[t.asuntoId] ? {...t, asunto: asuntoMap[t.asuntoId]} : t)
+        setTareas(tsConAsunto)
+        setVistaCongelada(tsConAsunto.filter((x:Tarea)=>!x.done))
         setExpandidoSet(new Set(as_.map((x:Asunto)=>x.id)))
         setLoading(false)
       }).catch(()=>setLoading(false))
@@ -351,9 +355,11 @@ export default function Home() {
     const res = await fetch("/api/tareas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
     if(!res.ok){alert("Error al agregar tarea");return}
     const t = await res.json()
+    const asuntoInfo = asuntos.find(a=>a.id===asuntoId)
+    const tConAsunto = asuntoInfo ? {...t, asunto:{nombre:asuntoInfo.nombre,id:asuntoId}} : t
     setAsuntos(as=>as.map(a=>a.id===asuntoId?{...a,tareas:[...a.tareas,t]}:a))
-    setTareas(ts=>[...ts,t])
-    setVistaCongelada(vs=>[...vs,t])
+    setTareas(ts=>[...ts,tConAsunto])
+    setVistaCongelada(vs=>[...vs,tConAsunto])
     setNtaMap(p=>({...p,[asuntoId]:{texto:"",fecha:"",urgente:false}}))
   }
 
@@ -483,8 +489,8 @@ export default function Home() {
             <div style={{flex:1,minWidth:0}}>
               <span className="caratula"
                 style={{fontSize:14,fontWeight:600,color:isDone?"#aaa":franja,cursor:"pointer",lineHeight:1.4,textDecoration:isDone?"line-through":"none"}}
-                onClick={e=>{e.stopPropagation();if(t.juicioId){setPanel("juicios");setExpandido(t.juicioId);setTabActiva(p=>({...p,[t.juicioId!]:"tareas"}))}}}
-              >{t.juicio?.autos||t.tema||tipoLabel}</span>
+                onClick={e=>{e.stopPropagation();if(t.juicioId){setPanel("juicios");setExpandido(t.juicioId);setTabActiva(p=>({...p,[t.juicioId!]:"tareas"}))}else if(t.asuntoId){const a=asuntos.find(x=>x.id===t.asuntoId);if(a){setPanel(a.tipo==="probono"?"probono":a.tipo==="consultoria"?"consultoria":"docencia");setExpandidoSet(s=>{const n=new Set(s);n.add(t.asuntoId!);return n})}}}}
+              >{t.juicio?.autos||t.asunto?.nombre||t.tema||tipoLabel}</span>
               {isEdit?(
                 <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:6}}>
                   <input style={{...S.input,fontSize:13}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
