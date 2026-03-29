@@ -72,6 +72,7 @@ export default function Home() {
   // Posponer
   const [posponerOpen, setPosponerOpen] = useState<string|null>(null)
   const [posponerFecha, setPosponerFecha] = useState("")
+  const [posponerMes, setPosponerMes] = useState<{y:number;m:number}|null>(null)
 
   // Mostrar concluidas dentro de juicio
   const [mostrarConc, setMostrarConc] = useState<Record<string,boolean>>({})
@@ -109,6 +110,8 @@ export default function Home() {
 
   // Nueva tarea personal
   const [ntPersonal, setNtPersonal] = useState({texto:"",fecha:"",urgente:false,info:"",webUrl:""})
+  // Nueva tarea desde panel derecho
+  const [ntPanel, setNtPanel] = useState({texto:"",fecha:""})
 
   useEffect(() => {
     if (expandido) {
@@ -526,13 +529,44 @@ export default function Home() {
               {fecha&&<span style={{fontSize:12,color:"#555",fontWeight:500,whiteSpace:"nowrap",marginLeft:"auto"}}>{formatFecha(fecha)}</span>}
               {!isDone&&(
                 <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
-                  <button style={S.btnPosponer} onClick={()=>{setPosponerOpen(posponerOpen===t.id?null:t.id);setPosponerFecha("")}}>↷ Posponer</button>
-                  {posponerOpen===t.id&&(
-                    <div style={{position:"absolute",top:30,right:0,background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:8,padding:"8px 10px",boxShadow:"0 4px 12px rgba(0,0,0,0.12)",zIndex:100,display:"flex",gap:6,alignItems:"center",whiteSpace:"nowrap"}}>
-                      <input type="date" style={{fontSize:12,padding:"3px 6px",border:"0.5px solid #ccc",borderRadius:6}} value={posponerFecha} onChange={e=>setPosponerFecha(e.target.value)}/>
-                      <button style={{fontSize:11,padding:"3px 8px",background:"#378ADD",color:"#fff",border:"none",borderRadius:6,cursor:"pointer"}} onClick={()=>posponer(t)}>OK</button>
-                    </div>
-                  )}
+                  <button style={S.btnPosponer} onClick={()=>{const open=posponerOpen===t.id?null:t.id;setPosponerOpen(open);setPosponerFecha("");if(open){const h=new Date();setPosponerMes({y:h.getFullYear(),m:h.getMonth()})}}}>↷ Posponer</button>
+                  {posponerOpen===t.id&&(()=>{
+                    const hoyD = new Date(); hoyD.setHours(0,0,0,0)
+                    const selDate = posponerFecha ? new Date(posponerFecha+"T00:00:00") : null
+                    const vm = posponerMes || {y:hoyD.getFullYear(),m:hoyD.getMonth()}
+                    const y = vm.y, m = vm.m
+                    const primerDia = new Date(y,m,1)
+                    const offset = (primerDia.getDay()+6)%7
+                    const diasEnMes = new Date(y,m+1,0).getDate()
+                    const celdas: (number|null)[] = [...Array(offset).fill(null), ...Array(diasEnMes).fill(0).map((_,i)=>i+1)]
+                    while(celdas.length%7!==0) celdas.push(null)
+                    const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+                    return (
+                      <div style={{position:"absolute",top:30,right:0,background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:10,padding:"10px",boxShadow:"0 4px 16px rgba(0,0,0,0.14)",zIndex:200,width:220}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                          <button style={{...S.btnMini,fontSize:14}} onClick={()=>setPosponerMes(m===0?{y:y-1,m:11}:{y,m:m-1})}>‹</button>
+                          <span style={{fontSize:12,fontWeight:500}}>{meses[m]} {y}</span>
+                          <button style={{...S.btnMini,fontSize:14}} onClick={()=>setPosponerMes(m===11?{y:y+1,m:0}:{y,m:m+1})}>›</button>
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:6}}>
+                          {["Lu","Ma","Mi","Ju","Vi","Sa","Do"].map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:"#aaa",fontWeight:600}}>{d}</div>)}
+                          {celdas.map((dia,i)=>{
+                            if(!dia) return <div key={i}/>
+                            const thisDate = new Date(y,m,dia)
+                            const key2 = `${y}-${String(m+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`
+                            const isSelected = posponerFecha===key2
+                            const isHoy = thisDate.getTime()===hoyD.getTime()
+                            const isPast = thisDate < hoyD
+                            return <div key={i} onClick={()=>!isPast&&setPosponerFecha(key2)} style={{textAlign:"center",fontSize:12,padding:"3px 0",borderRadius:4,cursor:isPast?"default":"pointer",background:isSelected?"#378ADD":isHoy?"#E6F1FB":"transparent",color:isSelected?"#fff":isPast?"#ccc":isHoy?"#185FA5":"#111",fontWeight:isSelected||isHoy?600:400}}>{dia}</div>
+                          })}
+                        </div>
+                        <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+                          <button style={S.btn} onClick={()=>setPosponerOpen(null)}>Cancelar</button>
+                          <button style={{...S.btnPrimary,opacity:posponerFecha?1:0.4}} onClick={()=>posponerFecha&&posponer(t)}>OK</button>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
               {!isDone&&<button style={{...S.btnUrgente,...(urgente?{background:"#E24B4A",color:"#fff"}:{})}} onClick={e=>{e.stopPropagation();toggleUrgente(t)}}>! urgente</button>}
@@ -598,6 +632,12 @@ export default function Home() {
               ))}
             </div>
           )}
+          <div style={{marginTop:14,paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
+            <div style={S.fieldLabel}>NUEVA TAREA</div>
+            <input style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} placeholder="Texto de la tarea..." value={ntPanel.texto} onChange={e=>setNtPanel(p=>({...p,texto:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&ntPanel.texto.trim()&&agregarTareaAsunto(asuntoPanel.id,tipoLabel).then(()=>setNtPanel({texto:"",fecha:""}))}/>
+            <input type="date" style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} value={ntPanel.fecha} onChange={e=>setNtPanel(p=>({...p,fecha:e.target.value}))}/>
+            <button style={{...S.btnPrimary,width:"100%",marginTop:6}} onClick={()=>{if(!ntPanel.texto.trim())return;const id=asuntoPanel.id;const tipo=tipoLabel;setNtaMap(p=>({...p,[id]:{texto:ntPanel.texto,fecha:ntPanel.fecha,urgente:false}}));agregarTareaAsunto(id,tipo).then(()=>setNtPanel({texto:"",fecha:""}));}}>+ Agregar tarea</button>
+          </div>
         </div>
       )
     }
@@ -626,6 +666,12 @@ export default function Home() {
               ))}
             </div>
           )}
+          <div style={{marginTop:14,paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
+            <div style={S.fieldLabel}>NUEVA TAREA</div>
+            <input style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} placeholder="Texto de la tarea..." value={ntPanel.texto} onChange={e=>setNtPanel(p=>({...p,texto:e.target.value}))}/>
+            <input type="date" style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} value={ntPanel.fecha} onChange={e=>setNtPanel(p=>({...p,fecha:e.target.value}))}/>
+            <button style={{...S.btnPrimary,width:"100%",marginTop:6}} onClick={()=>{if(!ntPanel.texto.trim())return;setNtMap(p=>({...p,[juicioPanel.id]:{texto:ntPanel.texto,fecha:ntPanel.fecha,urgente:false}}));agregarTareaJuicio(juicioPanel.id).then(()=>setNtPanel({texto:"",fecha:""}));}}>+ Agregar tarea</button>
+          </div>
         </div>
       )
     }
