@@ -6,14 +6,14 @@ type Prueba    = { id: string; tipo: string; contenido?: string; detalle?: strin
 type Honorario = { id: string; clienteContraparte?: string; total?: string; pagado?: string; estado: string; observaciones?: string }
 type ClienteJuicio = { id: string; apellido: string; nombre: string; dni?: string; correo?: string; telefono?: string; domicilio?: string }
 type Tarea     = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; asuntoId?: string; juicio?: { autos: string; id: string }; info?: string; webUrl?: string }
-type Juicio    = { id: string; nro?: string; autos: string; estado: string; fuero?: string; juzgado?: string; secretaria?: string; sala?: string; advertencia?: string; driveUrl?: string; iaUrl?: string; datosJuzgado?: string; otraInfo?: string; tareas: Tarea[]; pruebas: Prueba[]; honorarios?: Honorario[]; clientes?: ClienteJuicio[] }
+type Juicio    = { id: string; nro?: string; autos: string; estado: string; fuero?: string; juzgado?: string; secretaria?: string; sala?: string; advertencia?: string; driveUrl?: string; iaUrl?: string; datosJuzgado?: string; otraInfo?: string; compartidoCon?: string; categoria?: string; tareas: Tarea[]; pruebas: Prueba[]; honorarios?: Honorario[]; clientes?: ClienteJuicio[] }
 type Asunto    = { id: string; nombre: string; tipo: string; estado: string; advertencia?: string; otraInfo?: string; driveUrl?: string; webUrl?: string; tareas: Tarea[] }
 
-type JuicioForm = { autos: string; estado: string; nro: string; fuero: string; juzgado: string; secretaria: string; sala: string; advertencia: string; datosJuzgado: string; otraInfo: string; driveUrl: string; iaUrl: string; pjnUrl: string }
+type JuicioForm = { autos: string; estado: string; nro: string; fuero: string; juzgado: string; secretaria: string; sala: string; advertencia: string; datosJuzgado: string; otraInfo: string; compartidoCon: string; categoria: string; driveUrl: string; iaUrl: string; pjnUrl: string }
 type AsuntoForm = { nombre: string; tipo: string; estado: string; advertencia: string; otraInfo: string; driveUrl: string; webUrl: string }
 
 // ─── CONSTANTES ──────────────────────────────────────────────────────────────
-const FORM_JUICIO_VACIO: JuicioForm = { autos:"", estado:"Judicializado", nro:"", fuero:"", juzgado:"", secretaria:"", sala:"", advertencia:"", datosJuzgado:"", otraInfo:"", driveUrl:"", iaUrl:"", pjnUrl:"" }
+const FORM_JUICIO_VACIO: JuicioForm = { autos:"", estado:"Judicializado", nro:"", fuero:"", juzgado:"", secretaria:"", sala:"", advertencia:"", datosJuzgado:"", otraInfo:"", compartidoCon:"", categoria:"", driveUrl:"", iaUrl:"", pjnUrl:"" }
 const FORM_ASUNTO_VACIO: AsuntoForm = { nombre:"", tipo:"probono", estado:"Abierta", advertencia:"", otraInfo:"", driveUrl:"", webUrl:"" }
 
 const TODOS_ESTADOS_JUICIO = ["Inicio","Mediación","Administrativo","En preparación","Judicializado","Finalizado","Renunciado"]
@@ -25,10 +25,10 @@ const ESTADOS_TX: Record<string,string>   = { "Judicializado":"#185FA5","En prep
 const TIPOS_PRUEBA   = ["Confesional","Informativa","Testimonial","Reconocimiento","Pericial contable","Pericial informática","Pericial médica","Pericial técnica","Pericial (otra)"]
 const ESTADOS_PRUEBA = ["Ofrecida","En curso","Desistida","Finalizada"]
 const ESTADOS_HON    = ["Pendiente","Pago Parcial","Pago total"]
-const TIPOS_TAREA    = ["Casos y Juicios","Pro Bono","Docencia","Asuntos Personales"]
-const FRANJA: Record<string,string> = { "Casos y Juicios":"#3C3489","Pro Bono":"#3B6D11","Docencia":"#185FA5","Personales":"#A32D2D","Asuntos Personales":"#A32D2D","General":"#444" }
-const TOPBAR_BG: Record<string,string> = { tareas:"#F1EFE8", juicios:"#EEEDFE", probono:"#EAF3DE", docencia:"#E6F1FB", personales:"#FCEBEB", honorarios:"#FAEEDA" }
-const TOPBAR_TX: Record<string,string> = { tareas:"#444441", juicios:"#3C3489", probono:"#3B6D11", docencia:"#185FA5", personales:"#A32D2D", honorarios:"#633806" }
+const TIPOS_TAREA    = ["Casos y Juicios","Pro Bono","Docencia","Consultoría","Asuntos Personales"]
+const FRANJA: Record<string,string> = { "Casos y Juicios":"#3C3489","Pro Bono":"#3B6D11","Docencia":"#185FA5","Consultoría":"#7A4800","Personales":"#A32D2D","Asuntos Personales":"#A32D2D","General":"#444" }
+const TOPBAR_BG: Record<string,string> = { tareas:"#F1EFE8", juicios:"#EEEDFE", probono:"#EAF3DE", docencia:"#E6F1FB", consultoria:"#FFF3E0", personales:"#FCEBEB", honorarios:"#FAEEDA", clientes:"#F5EFE6" }
+const TOPBAR_TX: Record<string,string> = { tareas:"#444441", juicios:"#3C3489", probono:"#3B6D11", docencia:"#185FA5", consultoria:"#7A4800", personales:"#A32D2D", honorarios:"#633806", clientes:"#6B4226" }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function parseFecha(s: string): Date { const [y,m,d]=s.split("T")[0].split("-").map(Number); return new Date(y,m-1,d) }
@@ -75,12 +75,16 @@ export default function Home() {
   const [mostrarConc, setMostrarConc] = useState<Record<string,boolean>>({})
 
   // Filtros
-  const [filtroTipos, setFiltroTipos]     = useState<string[]>([])
-  const [filtroEstados, setFiltroEstados] = useState<string[]>([])
+  const [filtroTipos, setFiltroTipos]         = useState<string[]>([])
+  const [filtroEstados, setFiltroEstados]     = useState<string[]>([])
+  const [filtroAsuntos, setFiltroAsuntos]     = useState<"Abierta"|"Cerrada"|"">("")
+  const [filtroCategoria, setFiltroCategoria] = useState<string>("")
+  const [ordenPrueba, setOrdenPrueba]         = useState<"tipo"|"estado"|"">()
 
   // Panel derecho (tareas)
   const [panelDerechoVisible, setPanelDerechoVisible] = useState(true)
   const [juicioSeleccionado, setJuicioSeleccionado]   = useState<string|null>(null)
+  const [asuntoSeleccionado, setAsuntoSeleccionado]   = useState<string|null>(null)
   const [tareaSeleccionada, setTareaSeleccionada]     = useState<string|null>(null)
 
   // Barra lateral juicios (estadísticas)
@@ -184,7 +188,7 @@ export default function Home() {
     })
 
   const juiciosFiltrados = juicios
-    .filter(j=>filtroEstados.length===0?!INACTIVOS.includes(j.estado):filtroEstados.includes(j.estado))
+    .filter(j=>(filtroEstados.length===0?!INACTIVOS.includes(j.estado):filtroEstados.includes(j.estado))&&(!filtroCategoria||j.categoria===filtroCategoria))
     .sort((a,b)=>a.autos.localeCompare(b.autos,"es"))
 
   const honorariosPendientes = juicios.flatMap(j=>
@@ -253,7 +257,7 @@ export default function Home() {
   const abrirEditarJuicio = (j:Juicio, e:React.MouseEvent) => {
     e.stopPropagation()
     setEditandoJuicio(j)
-    setFormJuicio({ autos:j.autos||"", estado:j.estado||"Judicializado", nro:j.nro||"", fuero:j.fuero||"", juzgado:j.juzgado||"", secretaria:j.secretaria||"", sala:j.sala||"", advertencia:j.advertencia||"", datosJuzgado:j.datosJuzgado||"", otraInfo:j.otraInfo||"", driveUrl:j.driveUrl||"", iaUrl:j.iaUrl||"", pjnUrl:(j as any).pjnUrl||"" })
+    setFormJuicio({ autos:j.autos||"", estado:j.estado||"Judicializado", nro:j.nro||"", fuero:j.fuero||"", juzgado:j.juzgado||"", secretaria:j.secretaria||"", sala:j.sala||"", advertencia:j.advertencia||"", datosJuzgado:j.datosJuzgado||"", otraInfo:j.otraInfo||"", compartidoCon:j.compartidoCon||"", categoria:j.categoria||"", driveUrl:j.driveUrl||"", iaUrl:j.iaUrl||"", pjnUrl:(j as any).pjnUrl||"" })
     setModalJuicioOpen(true)
   }
 
@@ -462,7 +466,8 @@ export default function Home() {
         onClick={e=>{
           const tg=e.target as HTMLElement
           if(tg.closest("button")||tg.closest("a")||tg.closest(".check-box")||tg.closest(".caratula"))return
-          if(t.juicioId){setJuicioSeleccionado(t.juicioId);setTareaSeleccionada(t.id);if(!panelDerechoVisible)setPanelDerechoVisible(true)}
+          if(t.juicioId){setJuicioSeleccionado(t.juicioId);setAsuntoSeleccionado(null);setTareaSeleccionada(t.id);if(!panelDerechoVisible)setPanelDerechoVisible(true)}
+          else if(t.asuntoId){setAsuntoSeleccionado(t.asuntoId);setJuicioSeleccionado(null);setTareaSeleccionada(t.id);if(!panelDerechoVisible)setPanelDerechoVisible(true)}
         }}
       >
         <div style={{width:5,flexShrink:0,background:franja,borderRadius:"10px 0 0 10px"}}/>
@@ -532,8 +537,9 @@ export default function Home() {
 
   // ─── RENDER: PANEL DERECHO ────────────────────────────────────────────────────
   const juicioPanel = juicioSeleccionado ? juicios.find(j=>j.id===juicioSeleccionado) : null
+  const asuntoPanel = asuntoSeleccionado ? asuntos.find(a=>a.id===asuntoSeleccionado) : null
   const renderPanelDerecho = () => {
-    if (!juicioPanel) return (
+    if (!juicioPanel && !asuntoPanel) return (
       <div style={{padding:"18px 16px"}}>
         <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em",marginBottom:14}}>RESUMEN</div>
         {[
@@ -549,31 +555,60 @@ export default function Home() {
         ))}
       </div>
     )
-    const otrasTareas = juicioPanel.tareas.filter(t=>!t.done&&t.id!==tareaSeleccionada)
-    return (
-      <div style={{padding:"18px 16px"}}>
-        <span style={{fontSize:11,color:"#aaa",cursor:"pointer",marginBottom:12,display:"inline-block"}} onClick={()=>setJuicioSeleccionado(null)}>← volver</span>
-        <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:6,lineHeight:1.4}}>{juicioPanel.autos}</div>
-        <div style={{...S.badge,background:ESTADOS_BG[juicioPanel.estado]||"#F1EFE8",color:ESTADOS_TX[juicioPanel.estado]||"#444",display:"inline-block",marginBottom:10}}>{juicioPanel.estado}</div>
-        {juicioPanel.advertencia&&<div style={{fontSize:12,color:"#A32D2D",background:"#fff5f5",border:"0.5px solid #f5c5c5",borderRadius:6,padding:"6px 10px",marginBottom:10}}>⚠ {juicioPanel.advertencia}</div>}
-        {juicioPanel.nro&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>EXPEDIENTE</div><div style={{fontSize:13}}>{juicioPanel.nro}</div></div>}
-        {juicioPanel.fuero&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>FUERO</div><div style={{fontSize:13}}>{juicioPanel.fuero}</div></div>}
-        {juicioPanel.juzgado&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>JUZGADO</div><div style={{fontSize:13}}>Juz. {parseInt(juicioPanel.juzgado)||juicioPanel.juzgado}{juicioPanel.secretaria?` · Sec. ${juicioPanel.secretaria}`:""}</div></div>}
-        <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:12}}>
-          {juicioPanel.driveUrl&&<a href={juicioPanel.driveUrl} target="_blank" rel="noopener noreferrer" style={S.pjLink}>📁 Drive</a>}
-          {(juicioPanel as any).pjnUrl&&<a href={(juicioPanel as any).pjnUrl} target="_blank" rel="noopener noreferrer" style={{...S.pjLink,color:"#185FA5",borderColor:"#b5d4f4",background:"#E6F1FB"}}>⚖ PJN</a>}
-          {juicioPanel.iaUrl&&<a href={juicioPanel.iaUrl} target="_blank" rel="noopener noreferrer" style={{...S.pjLink,color:"#7B3F9E",borderColor:"#d5b5f5",background:"#f5eeff"}}>🤖 IA</a>}
-        </div>
-        {otrasTareas.length>0&&(
-          <div style={{marginTop:14,paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
-            <div style={S.fieldLabel}>TAREAS PENDIENTES</div>
-            {otrasTareas.map(t=>(
-              <div key={t.id} style={{fontSize:12,color:"#333",padding:"5px 0",borderBottom:"0.5px solid #f0f0f0"}}>{t.texto}{t.fecha?` · ${formatFecha(t.fecha)}`:""}</div>
-            ))}
+    if (asuntoPanel) {
+      const tipoLabel = asuntoPanel.tipo==="probono"?"Pro Bono":asuntoPanel.tipo==="consultoria"?"Consultoría":"Docencia"
+      const color = FRANJA[tipoLabel]||"#888"
+      const otrasTareas = asuntoPanel.tareas.filter(t=>!t.done&&t.id!==tareaSeleccionada)
+      return (
+        <div style={{padding:"18px 16px"}}>
+          <span style={{fontSize:11,color:"#aaa",cursor:"pointer",marginBottom:12,display:"inline-block"}} onClick={()=>setAsuntoSeleccionado(null)}>← volver</span>
+          <div style={{fontSize:14,fontWeight:600,color,marginBottom:6,lineHeight:1.4}}>{asuntoPanel.nombre}</div>
+          <div style={{...S.badge,background:asuntoPanel.estado==="Abierta"?"#E6F1FB":"#EAF3DE",color:asuntoPanel.estado==="Abierta"?"#185FA5":"#3B6D11",display:"inline-block",marginBottom:10}}>{asuntoPanel.estado}</div>
+          {asuntoPanel.advertencia&&<div style={{fontSize:12,color:"#A32D2D",background:"#fff5f5",border:"0.5px solid #f5c5c5",borderRadius:6,padding:"6px 10px",marginBottom:10}}>⚠ {asuntoPanel.advertencia}</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}>
+            {asuntoPanel.driveUrl&&<a href={asuntoPanel.driveUrl} target="_blank" rel="noopener noreferrer" style={S.pjLink}>📁 Drive</a>}
+            {asuntoPanel.webUrl&&<a href={asuntoPanel.webUrl} target="_blank" rel="noopener noreferrer" style={{...S.pjLink,color:"#185FA5"}}>🌐 Web</a>}
           </div>
-        )}
-      </div>
-    )
+          {asuntoPanel.otraInfo&&<div style={{marginTop:10}}><div style={S.fieldLabel}>INFORMACIÓN</div><div style={{fontSize:13}}>{asuntoPanel.otraInfo}</div></div>}
+          {otrasTareas.length>0&&(
+            <div style={{marginTop:14,paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
+              <div style={S.fieldLabel}>TAREAS PENDIENTES</div>
+              {otrasTareas.map(t=>(
+                <div key={t.id} style={{fontSize:12,color:"#333",padding:"5px 0",borderBottom:"0.5px solid #f0f0f0"}}>{t.texto}{t.fecha?` · ${formatFecha(t.fecha)}`:""}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+    if (juicioPanel) {
+      const otrasTareas = juicioPanel.tareas.filter(t=>!t.done&&t.id!==tareaSeleccionada)
+      return (
+        <div style={{padding:"18px 16px"}}>
+          <span style={{fontSize:11,color:"#aaa",cursor:"pointer",marginBottom:12,display:"inline-block"}} onClick={()=>setJuicioSeleccionado(null)}>← volver</span>
+          <div style={{fontSize:14,fontWeight:600,color:FRANJA["Casos y Juicios"],marginBottom:6,lineHeight:1.4}}>{juicioPanel.autos}</div>
+          <div style={{...S.badge,background:ESTADOS_BG[juicioPanel.estado]||"#F1EFE8",color:ESTADOS_TX[juicioPanel.estado]||"#444",display:"inline-block",marginBottom:10}}>{juicioPanel.estado}</div>
+          {juicioPanel.advertencia&&<div style={{fontSize:12,color:"#A32D2D",background:"#fff5f5",border:"0.5px solid #f5c5c5",borderRadius:6,padding:"6px 10px",marginBottom:10}}>⚠ {juicioPanel.advertencia}</div>}
+          {juicioPanel.nro&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>EXPEDIENTE</div><div style={{fontSize:13}}>{juicioPanel.nro}</div></div>}
+          {juicioPanel.fuero&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>FUERO</div><div style={{fontSize:13}}>{juicioPanel.fuero}</div></div>}
+          {juicioPanel.juzgado&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>JUZGADO</div><div style={{fontSize:13}}>Juz. {parseInt(juicioPanel.juzgado)||juicioPanel.juzgado}{juicioPanel.secretaria?` · Sec. ${juicioPanel.secretaria}`:""}</div></div>}
+          {juicioPanel.compartidoCon&&<div style={{marginBottom:8}}><div style={S.fieldLabel}>COMPARTIDO CON</div><div style={{fontSize:13}}>{juicioPanel.compartidoCon}</div></div>}
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:12}}>
+            {juicioPanel.driveUrl&&<a href={juicioPanel.driveUrl} target="_blank" rel="noopener noreferrer" style={S.pjLink}>📁 Drive</a>}
+            {(juicioPanel as any).pjnUrl&&<a href={(juicioPanel as any).pjnUrl} target="_blank" rel="noopener noreferrer" style={{...S.pjLink,color:"#185FA5",borderColor:"#b5d4f4",background:"#E6F1FB"}}>⚖ PJN</a>}
+            {juicioPanel.iaUrl&&<a href={juicioPanel.iaUrl} target="_blank" rel="noopener noreferrer" style={{...S.pjLink,color:"#7B3F9E",borderColor:"#d5b5f5",background:"#f5eeff"}}>🤖 IA</a>}
+          </div>
+          {otrasTareas.length>0&&(
+            <div style={{marginTop:14,paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
+              <div style={S.fieldLabel}>TAREAS PENDIENTES</div>
+              {otrasTareas.map(t=>(
+                <div key={t.id} style={{fontSize:12,color:"#333",padding:"5px 0",borderBottom:"0.5px solid #f0f0f0"}}>{t.texto}{t.fecha?` · ${formatFecha(t.fecha)}`:""}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
   }
 
   // ─── RENDER: JUICIO CARD ─────────────────────────────────────────────────────
@@ -671,6 +706,8 @@ export default function Home() {
                   </div>
                   {j.datosJuzgado&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Datos del juzgado</div><div style={{fontSize:13}}>{j.datosJuzgado}</div></div>}
                   {j.otraInfo&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Otra información</div><div style={{fontSize:13}}>{j.otraInfo}</div></div>}
+                  {j.compartidoCon&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Compartido con</div><div style={{fontSize:13}}>{j.compartidoCon}</div></div>}
+                  {j.categoria&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Categoría</div><div style={{fontSize:13}}>{j.categoria}</div></div>}
                 </div>
 
                 {/* Concluidas */}
@@ -695,18 +732,38 @@ export default function Home() {
             {/* ── Tab Pruebas ── */}
             {tab==="pruebas"&&(
               <div>
-                {j.pruebas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin pruebas cargadas</div>}
-                {j.pruebas.map(p=>(
-                  <div key={p.id} style={S.pruebaRow}>
-                    <div style={{flex:1}}>
-                      <span style={{fontWeight:500,fontSize:13}}>{p.tipo}</span>
-                      {p.contenido&&<div style={{fontSize:12,color:"#555",marginTop:2}}>{p.contenido}</div>}
-                      {p.detalle&&<div style={{fontSize:11,color:"#888"}}>{p.detalle}</div>}
-                    </div>
-                    <span style={{...S.badge,background:"#f0f0f0",color:"#555",fontSize:11}}>{p.estado}</span>
-                    <button style={{...S.btnMini,color:"#E24B4A"}} onClick={()=>borrarPrueba(j.id,p.id)}>✕</button>
+                {j.pruebas.length>0&&(
+                  <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
+                    <span style={{fontSize:11,color:"#888",alignSelf:"center"}}>Ordenar:</span>
+                    <button style={{...S.filterBtn,...(ordenPrueba==="tipo"?S.filterBtnActive:{})}} onClick={()=>setOrdenPrueba((p:any)=>p==="tipo"?"":"tipo")}>Tipo</button>
+                    <button style={{...S.filterBtn,...(ordenPrueba==="estado"?S.filterBtnActive:{})}} onClick={()=>setOrdenPrueba((p:any)=>p==="estado"?"":"estado")}>Estado</button>
                   </div>
-                ))}
+                )}
+                {j.pruebas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin pruebas cargadas</div>}
+                {[...j.pruebas].sort((a,b)=>{
+                  if(ordenPrueba==="tipo") return a.tipo.localeCompare(b.tipo,"es")
+                  if(ordenPrueba==="estado") return ESTADOS_PRUEBA.indexOf(a.estado)-ESTADOS_PRUEBA.indexOf(b.estado)
+                  return 0
+                }).map(p=>{
+                  const ec = p.estado==="Finalizada"?"#3B6D11":p.estado==="En curso"?"#185FA5":p.estado==="Desistida"?"#A32D2D":"#633806"
+                  const eb = p.estado==="Finalizada"?"#EAF3DE":p.estado==="En curso"?"#E6F1FB":p.estado==="Desistida"?"#FCEBEB":"#FAEEDA"
+                  return (
+                    <div key={p.id} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:10,marginBottom:6,background:"#fff"}}>
+                      <div style={{width:4,flexShrink:0,background:ec,borderRadius:"10px 0 0 10px"}}/>
+                      <div style={{flex:1,padding:"10px 12px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                          <span style={{fontWeight:500,fontSize:13,color:"#111"}}>{p.tipo}</span>
+                          <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+                            <span style={{...S.badge,background:eb,color:ec,fontSize:11}}>{p.estado}</span>
+                            <button style={{...S.btnMini,color:"#E24B4A"}} onClick={()=>borrarPrueba(j.id,p.id)}>✕</button>
+                          </div>
+                        </div>
+                        {p.contenido&&<div style={{fontSize:12,color:"#333",marginTop:5,lineHeight:1.4}}>{p.contenido}</div>}
+                        {p.detalle&&<div style={{fontSize:11,color:"#888",marginTop:3}}>{p.detalle}</div>}
+                      </div>
+                    </div>
+                  )
+                })}
                 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
                   <select style={{...S.input,flex:"1 1 160px"}} value={np.tipo} onChange={e=>setNpMap(p=>({...p,[j.id]:{...np,tipo:e.target.value}}))}><option value="">Tipo de prueba...</option>{TIPOS_PRUEBA.map(t=><option key={t}>{t}</option>)}</select>
                   <input style={{...S.input,flex:"2 1 180px"}} placeholder="Contenido..." value={np.contenido} onChange={e=>setNpMap(p=>({...p,[j.id]:{...np,contenido:e.target.value}}))}/>
@@ -723,18 +780,30 @@ export default function Home() {
             {tab==="honorarios"&&(
               <div>
                 {(j.honorarios||[]).length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin honorarios cargados</div>}
-                {(j.honorarios||[]).map(h=>(
-                  <div key={h.id} style={{...S.pruebaRow,alignItems:"flex-start"}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:500,fontSize:13}}>{h.clienteContraparte}</div>
-                      <div style={{fontSize:12,color:"#555"}}>{h.total&&`Total: ${h.total}`}{h.pagado?` · Pagado: ${h.pagado}`:""}</div>
-                      {h.observaciones&&<div style={{fontSize:11,color:"#888"}}>{h.observaciones}</div>}
+                {(j.honorarios||[]).map(h=>{
+                  const hc = h.estado==="Pago total"?"#3B6D11":h.estado==="Pago Parcial"?"#185FA5":"#633806"
+                  const hb = h.estado==="Pago total"?"#EAF3DE":h.estado==="Pago Parcial"?"#E6F1FB":"#FAEEDA"
+                  return (
+                    <div key={h.id} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:10,marginBottom:6,background:"#fff"}}>
+                      <div style={{width:4,flexShrink:0,background:hc,borderRadius:"10px 0 0 10px"}}/>
+                      <div style={{flex:1,padding:"10px 12px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                          <div style={{fontWeight:500,fontSize:13,color:"#111"}}>{h.clienteContraparte}</div>
+                          <span style={{...S.badge,background:hb,color:hc,fontSize:11,flexShrink:0}}>{h.estado}</span>
+                        </div>
+                        <div style={{fontSize:12,color:"#555",marginTop:4}}>{h.total&&`Total: ${h.total}`}{h.pagado?` · Pagado: ${h.pagado}`:""}</div>
+                        {h.observaciones&&<div style={{fontSize:11,color:"#888",marginTop:3}}>{h.observaciones}</div>}
+                      </div>
                     </div>
-                    <span style={{...S.badge,background:h.estado==="Pago total"?"#EAF3DE":h.estado==="Pago Parcial"?"#E6F1FB":"#FAEEDA",color:h.estado==="Pago total"?"#3B6D11":h.estado==="Pago Parcial"?"#185FA5":"#633806",fontSize:11}}>{h.estado}</span>
-                  </div>
-                ))}
+                  )
+                })}
                 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-                  <input style={{...S.input,flex:"2 1 160px"}} placeholder="Cliente / Contraparte *" value={nh.clienteContraparte} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,clienteContraparte:e.target.value}}))}/>
+                  <select style={{...S.input,flex:"2 1 160px"}} value={nh.clienteContraparte} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,clienteContraparte:e.target.value}}))}>
+                    <option value="">Cliente / Contraparte...</option>
+                    {(j.clientes||[]).map(c=><option key={c.id} value={`${c.apellido}, ${c.nombre}`}>{c.apellido}, {c.nombre}</option>)}
+                    <option value="__otro__">Otro (escribir abajo)</option>
+                  </select>
+                  {nh.clienteContraparte==="__otro__"&&<input style={{...S.input,flex:"2 1 160px"}} placeholder="Escribir nombre..." onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,clienteContraparte:e.target.value}}))}/>}
                   <input style={{...S.input,flex:"1 1 100px"}} placeholder="Total" value={nh.total} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,total:e.target.value}}))}/>
                   <input style={{...S.input,flex:"1 1 100px"}} placeholder="Pagado" value={nh.pagado} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,pagado:e.target.value}}))}/>
                   <select style={{...S.input,flex:"1 1 120px"}} value={nh.estado} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,estado:e.target.value}}))}>{ESTADOS_HON.map(e=><option key={e}>{e}</option>)}</select>
@@ -799,7 +868,7 @@ export default function Home() {
     const nt     = ntaMap[a.id]||{texto:"",fecha:"",urgente:false}
     const activas = a.tareas.filter(t=>!t.done).sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
     const concluidas = a.tareas.filter(t=>t.done).slice(-5)
-    const tipoLabel = a.tipo==="probono"?"Pro Bono":"Docencia"
+    const tipoLabel = a.tipo==="probono"?"Pro Bono":a.tipo==="consultoria"?"Consultoría":"Docencia"
     return (
       <div key={a.id} id={`item-${a.id}`} style={{...S.card,borderColor:exp?FRANJA[tipoLabel]:"#e5e7eb"}}>
         <div style={S.cardHeader} onClick={toggleExp}>
@@ -882,9 +951,11 @@ export default function Home() {
   const fldJ = (k:keyof JuicioForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setFormJuicio(p=>({...p,[k]:e.target.value}))
   const fldA = (k:keyof AsuntoForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setFormAsunto(p=>({...p,[k]:e.target.value}))
 
-  const asuntosProbono  = asuntos.filter(a=>a.tipo==="probono")
-  const asuntosDocencia = asuntos.filter(a=>a.tipo==="docencia")
-  const tareasPersonales = vistaActual.filter(t=>t.tipo==="Personales"&&!t.done)
+  const asuntosProbono     = asuntos.filter(a=>a.tipo==="probono"   &&(filtroAsuntos===""||a.estado===filtroAsuntos))
+  const asuntosDocencia    = asuntos.filter(a=>a.tipo==="docencia"  &&(filtroAsuntos===""||a.estado===filtroAsuntos))
+  const asuntosConsultoria = asuntos.filter(a=>a.tipo==="consultoria"&&(filtroAsuntos===""||a.estado===filtroAsuntos))
+  const tareasPersonales   = vistaActual.filter(t=>t.tipo==="Personales"&&!t.done)
+  const categoriasJuicios  = Array.from(new Set(juicios.map(j=>j.categoria).filter(Boolean))) as string[]
 
   // ─── RENDER PRINCIPAL ─────────────────────────────────────────────────────────
   return (
@@ -909,6 +980,8 @@ export default function Home() {
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Advertencia</div><input style={S.inputM} value={formJuicio.advertencia} onChange={fldJ("advertencia")} placeholder="Algo importante a destacar..."/></div>
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Datos del juzgado</div><input style={S.inputM} value={formJuicio.datosJuzgado} onChange={fldJ("datosJuzgado")}/></div>
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Otra información</div><textarea style={{...S.inputM,height:60,resize:"vertical"}} value={formJuicio.otraInfo} onChange={fldJ("otraInfo")}/></div>
+              <div><div style={S.fieldLabel}>Compartido con</div><input style={S.inputM} value={formJuicio.compartidoCon} onChange={fldJ("compartidoCon")} placeholder="Nombre del colega..."/></div>
+              <div><div style={S.fieldLabel}>Categoría</div><input style={S.inputM} value={formJuicio.categoria} onChange={fldJ("categoria")} placeholder="Ej: Familia, Laboral..."/></div>
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>📁 Link Drive</div><input style={S.inputM} value={formJuicio.driveUrl} onChange={fldJ("driveUrl")} placeholder="https://drive.google.com/..."/></div>
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>⚖ Link PJN (expediente)</div><input style={S.inputM} value={formJuicio.pjnUrl} onChange={fldJ("pjnUrl")} placeholder="https://scw.pjn.gov.ar/..."/></div>
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>🤖 Link Proyecto IA</div><input style={S.inputM} value={formJuicio.iaUrl} onChange={fldJ("iaUrl")} placeholder="https://..."/></div>
@@ -930,7 +1003,7 @@ export default function Home() {
               <button style={S.btnMini} onClick={()=>setModalAsuntoOpen(false)}>✕</button>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div><div style={S.fieldLabel}>Tipo</div><select style={S.inputM} value={formAsunto.tipo} onChange={fldA("tipo")}><option value="probono">Pro Bono</option><option value="docencia">Docencia</option></select></div>
+              <div><div style={S.fieldLabel}>Tipo</div><select style={S.inputM} value={formAsunto.tipo} onChange={fldA("tipo")}><option value="probono">Pro Bono</option><option value="docencia">Docencia</option><option value="consultoria">Consultoría</option></select></div>
               <div><div style={S.fieldLabel}>Nombre / Carátula *</div><input style={S.inputM} value={formAsunto.nombre} onChange={fldA("nombre")} placeholder="Nombre del asunto..."/></div>
               <div><div style={S.fieldLabel}>Estado</div><select style={S.inputM} value={formAsunto.estado} onChange={fldA("estado")}><option>Abierta</option><option>Cerrada</option></select></div>
               <div><div style={S.fieldLabel}>Advertencia</div><input style={S.inputM} value={formAsunto.advertencia} onChange={fldA("advertencia")} placeholder="Algo importante..."/></div>
@@ -970,10 +1043,11 @@ export default function Home() {
 
         {/* Menús principales — negrita negra */}
         {[
-          {id:"juicios",     label:"Casos y Juicios", badge:juiciosFiltrados.length},
-          {id:"probono",     label:"Pro Bono",         badge:asuntosProbono.length||null},
-          {id:"docencia",    label:"Docencia",         badge:asuntosDocencia.length||null},
-          {id:"personales",  label:"Asuntos Personales", badge:tareasPersonales.length||null},
+          {id:"juicios",      label:"Casos y Juicios",    badge:juiciosFiltrados.length},
+          {id:"probono",      label:"Pro Bono",            badge:asuntosProbono.length||null},
+          {id:"docencia",     label:"Docencia",            badge:asuntosDocencia.length||null},
+          {id:"consultoria",  label:"Consultoría",         badge:asuntosConsultoria.length||null},
+          {id:"personales",   label:"Asuntos Personales",  badge:tareasPersonales.length||null},
         ].map(item=>(
           <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>setPanel(item.id)}>
             {item.label}
@@ -983,14 +1057,15 @@ export default function Home() {
 
         <div style={{height:1,background:"#e5e7eb",margin:"6px 14px"}}/>
 
-        {/* Honorarios — estilo gris original */}
-        <div
-          style={{padding:"7px 14px",cursor:"pointer",fontSize:13,color: panel==="honorarios"?"#111":"#666",fontWeight: panel==="honorarios"?500:400,borderLeft: panel==="honorarios"?"2px solid #378ADD":"2px solid transparent",background: panel==="honorarios"?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}
-          onClick={()=>setPanel("honorarios")}
-        >
-          Honorarios
-          {honorariosPendientes.length>0&&<span style={S.navBadge}>{honorariosPendientes.length}</span>}
-        </div>
+        {[
+          {id:"honorarios", label:"Honorarios", badge:honorariosPendientes.length||null},
+          {id:"clientes",   label:"Clientes",   badge:todosClientes.length||null},
+        ].map(item=>(
+          <div key={item.id} style={{padding:"7px 14px",cursor:"pointer",fontSize:13,color:panel===item.id?"#111":"#666",fontWeight:panel===item.id?500:400,borderLeft:panel===item.id?"2px solid #378ADD":"2px solid transparent",background:panel===item.id?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}} onClick={()=>setPanel(item.id)}>
+            {item.label}
+            {item.badge!=null&&item.badge>0?<span style={S.navBadge}>{item.badge}</span>:null}
+          </div>
+        ))}
 
         <div style={{flex:1}}/>
         <div style={{padding:"10px 14px",borderTop:"0.5px solid #e5e7eb",display:"flex",flexDirection:"column",gap:6}}>
@@ -1005,7 +1080,7 @@ export default function Home() {
         {/* Topbar */}
         <div style={{...S.topbar,background:TOPBAR_BG[panel]||"#fff",borderBottom:`0.5px solid #e5e7eb`}}>
           <div style={{fontWeight:500,fontSize:20,marginRight:12,color:TOPBAR_TX[panel]||"#111"}}>
-            {{tareas:"Tareas",juicios:"Casos y Juicios",probono:"Pro Bono",docencia:"Docencia",personales:"Asuntos Personales",honorarios:"Honorarios"}[panel]}
+            {{tareas:"Tareas",juicios:"Casos y Juicios",probono:"Pro Bono",docencia:"Docencia",consultoria:"Consultoría",personales:"Asuntos Personales",honorarios:"Honorarios",clientes:"Clientes"}[panel]}
           </div>
 
           {panel==="tareas"&&<>
@@ -1028,13 +1103,24 @@ export default function Home() {
               <button key={e} style={{...S.filterBtn,...(filtroEstados.includes(e)?{background:ESTADOS_BG[e]||"#f0f0f0",color:ESTADOS_TX[e]||"#333",borderColor:ESTADOS_TX[e]||"#ccc"}:{})}}
                 onClick={()=>setFiltroEstados(p=>p.includes(e)?p.filter(x=>x!==e):[...p,e])}>{e}</button>
             ))}
-            {filtroEstados.length>0&&<button style={{...S.filterBtn,color:"#888"}} onClick={()=>setFiltroEstados([])}>✕</button>}
+            {categoriasJuicios.length>0&&<>
+              <span style={{color:"#d0d0d0"}}>·</span>
+              <select style={{...S.filterBtn,cursor:"pointer"}} value={filtroCategoria} onChange={e=>setFiltroCategoria(e.target.value)}>
+                <option value="">Todas las categorías</option>
+                {categoriasJuicios.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+            </>}
+            {(filtroEstados.length>0||filtroCategoria)&&<button style={{...S.filterBtn,color:"#888"}} onClick={()=>{setFiltroEstados([]);setFiltroCategoria("")}}>✕</button>}
             <button style={S.btnPrimary} onClick={abrirNuevoJuicio}>+ Nuevo</button>
           </div>}
 
-          {(panel==="probono"||panel==="docencia")&&(
+          {(panel==="probono"||panel==="docencia"||panel==="consultoria")&&<div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {["Abierta","Cerrada"].map(e=>(
+              <button key={e} style={{...S.filterBtn,...(filtroAsuntos===e?S.filterBtnActive:{})}} onClick={()=>setFiltroAsuntos((p:any)=>p===e?"":e)}>{e}</button>
+            ))}
+            {filtroAsuntos&&<button style={{...S.filterBtn,color:"#888"}} onClick={()=>setFiltroAsuntos("")}>✕</button>}
             <button style={S.btnPrimary} onClick={()=>abrirNuevoAsunto(panel)}>+ Nuevo asunto</button>
-          )}
+          </div>}
         </div>
 
         {/* Contenido */}
@@ -1094,16 +1180,17 @@ export default function Home() {
 
             {/* Panel Pro Bono */}
             {!loading&&panel==="probono"&&(
-              <div>
-                {asuntosProbono.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay asuntos de Pro Bono.</div>:asuntosProbono.map(renderAsunto)}
-              </div>
+              <div>{asuntosProbono.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay asuntos de Pro Bono{filtroAsuntos?` (${filtroAsuntos}s)`:""} .</div>:asuntosProbono.map(renderAsunto)}</div>
             )}
 
             {/* Panel Docencia */}
             {!loading&&panel==="docencia"&&(
-              <div>
-                {asuntosDocencia.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay asuntos de Docencia.</div>:asuntosDocencia.map(renderAsunto)}
-              </div>
+              <div>{asuntosDocencia.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay asuntos de Docencia{filtroAsuntos?` (${filtroAsuntos}s)`:""} .</div>:asuntosDocencia.map(renderAsunto)}</div>
+            )}
+
+            {/* Panel Consultoría */}
+            {!loading&&panel==="consultoria"&&(
+              <div>{asuntosConsultoria.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay asuntos de Consultoría{filtroAsuntos?` (${filtroAsuntos}s)`:""} .</div>:asuntosConsultoria.map(renderAsunto)}</div>
             )}
 
             {/* Panel Personales */}
@@ -1135,15 +1222,42 @@ export default function Home() {
             {/* Panel Honorarios */}
             {!loading&&panel==="honorarios"&&(
               <div>
-                {honorariosPendientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay honorarios pendientes.</div>:honorariosPendientes.map((h,i)=>(
-                  <div key={i} style={S.card}>
-                    <div style={S.cardHeader}>
-                      <div style={{flex:1}}>
-                        <div style={S.cardTitle}>{(h as any).autos}</div>
-                        <div style={S.cardMeta}>{h.clienteContraparte}{h.total?` · Total: ${h.total}`:""}{h.pagado?` · Pagado: ${h.pagado}`:""}</div>
-                        {h.observaciones&&<div style={{fontSize:11,color:"#888",marginTop:2}}>{h.observaciones}</div>}
+                {honorariosPendientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay honorarios pendientes.</div>:honorariosPendientes.map((h,i)=>{
+                  const hc = h.estado==="Pago Parcial"?"#185FA5":"#633806"
+                  const hb = h.estado==="Pago Parcial"?"#E6F1FB":"#FAEEDA"
+                  return (
+                    <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,marginBottom:8,background:"#fff"}}>
+                      <div style={{width:5,flexShrink:0,background:hc,borderRadius:"12px 0 0 12px"}}/>
+                      <div style={{flex:1,padding:"12px 14px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                          <div style={{fontSize:14,fontWeight:500,color:FRANJA["Casos y Juicios"]}}>{(h as any).autos}</div>
+                          <span style={{...S.badge,background:hb,color:hc,flexShrink:0}}>{h.estado}</span>
+                        </div>
+                        <div style={{fontSize:13,color:"#333",marginTop:4}}>{h.clienteContraparte}</div>
+                        <div style={{fontSize:12,color:"#888",marginTop:3}}>{h.total?`Total: ${h.total}`:""}{h.pagado?` · Pagado: ${h.pagado}`:""}</div>
+                        {h.observaciones&&<div style={{fontSize:11,color:"#aaa",marginTop:2}}>{h.observaciones}</div>}
                       </div>
-                      <span style={{...S.badge,background:h.estado==="Pago Parcial"?"#E6F1FB":"#FAEEDA",color:h.estado==="Pago Parcial"?"#185FA5":"#633806"}}>{h.estado}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Panel Clientes */}
+            {!loading&&panel==="clientes"&&(
+              <div>
+                {todosClientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay clientes cargados.</div>:
+                [...todosClientes].sort((a,b)=>a.apellido.localeCompare(b.apellido,"es")).map((c,i)=>(
+                  <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,marginBottom:8,background:"#fff"}}>
+                    <div style={{width:5,flexShrink:0,background:"#8B5E3C",borderRadius:"12px 0 0 12px"}}/>
+                    <div style={{flex:1,padding:"12px 14px"}}>
+                      <div style={{fontSize:14,fontWeight:500,color:"#6B4226",marginBottom:4}}>{c.apellido}, {c.nombre}</div>
+                      <div style={{display:"flex",gap:16,flexWrap:"wrap" as const}}>
+                        {c.dni&&<span style={{fontSize:12,color:"#555"}}>DNI: {c.dni}</span>}
+                        {c.correo&&<span style={{fontSize:12,color:"#555"}}>✉ {c.correo}</span>}
+                        {c.telefono&&<span style={{fontSize:12,color:"#555"}}>📞 {c.telefono}</span>}
+                        {c.domicilio&&<span style={{fontSize:12,color:"#555"}}>📍 {c.domicilio}</span>}
+                      </div>
                     </div>
                   </div>
                 ))}
