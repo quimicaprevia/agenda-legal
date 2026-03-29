@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { getServerSession } from "next-auth/next"
-import { authOptions } from "./auth/[...nextauth]"
+import { authOptions } from "../../lib/authOptions"
 import { PrismaClient } from "@prisma/client"
 import * as XLSX from "xlsx"
 import path from "path"
