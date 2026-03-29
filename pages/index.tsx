@@ -26,7 +26,7 @@ const TIPOS_PRUEBA   = ["Confesional","Informativa","Testimonial","Reconocimient
 const ESTADOS_PRUEBA = ["Ofrecida","En curso","Desistida","Finalizada"]
 const ESTADOS_HON    = ["Pendiente","Pago Parcial","Pago total"]
 const TIPOS_TAREA    = ["Casos y Juicios","Pro Bono","Docencia","Asuntos Personales"]
-const FRANJA: Record<string,string> = { "Casos y Juicios":"#7F77DD","Pro Bono":"#639922","Docencia":"#378ADD","Personales":"#E24B4A","Asuntos Personales":"#E24B4A","General":"#888" }
+const FRANJA: Record<string,string> = { "Casos y Juicios":"#3C3489","Pro Bono":"#3B6D11","Docencia":"#185FA5","Personales":"#A32D2D","Asuntos Personales":"#A32D2D","General":"#444" }
 const TOPBAR_BG: Record<string,string> = { tareas:"#F1EFE8", juicios:"#EEEDFE", probono:"#EAF3DE", docencia:"#E6F1FB", personales:"#FCEBEB", honorarios:"#FAEEDA" }
 const TOPBAR_TX: Record<string,string> = { tareas:"#444441", juicios:"#3C3489", probono:"#3B6D11", docencia:"#185FA5", personales:"#A32D2D", honorarios:"#633806" }
 
