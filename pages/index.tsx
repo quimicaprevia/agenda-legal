@@ -66,6 +66,8 @@ export default function Home() {
   const [editTexto, setEditTexto]   = useState("")
   const [editFecha, setEditFecha]   = useState("")
   const [editUrgente, setEditUrgente] = useState(false)
+  const [editInfo, setEditInfo]     = useState("")
+  const [editWebUrl, setEditWebUrl] = useState("")
 
   // Posponer
   const [posponerOpen, setPosponerOpen] = useState<string|null>(null)
@@ -231,8 +233,12 @@ export default function Home() {
   }
 
   const guardarEdicion = (t:Tarea) => {
-    fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,texto:editTexto,urgente:editUrgente,fecha:editFecha||null})})
-    setCambios(p=>({...p,[t.id]:{...p[t.id],texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}}))
+    const body:any = {id:t.id,texto:editTexto,urgente:editUrgente,fecha:editFecha||null}
+    if(t.tipo==="Personales"){body.info=editInfo;body.webUrl=editWebUrl}
+    fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    const cambio:Partial<Tarea> = {texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}
+    if(t.tipo==="Personales"){cambio.info=editInfo;cambio.webUrl=editWebUrl}
+    setCambios(p=>({...p,[t.id]:{...p[t.id],...cambio}}))
     setEditId(null)
   }
 
@@ -490,19 +496,27 @@ export default function Home() {
                     <button style={S.btnPrimary} onClick={e=>{e.stopPropagation();guardarEdicion(t)}}>Guardar</button>
                     <button style={S.btn} onClick={e=>{e.stopPropagation();setEditId(null)}}>✕</button>
                   </div>
+                  {t.tipo==="Personales"&&(
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                      <input style={{...S.input,flex:"2 1 180px"}} placeholder="Información adicional..." value={editInfo} onChange={e=>setEditInfo(e.target.value)}/>
+                      <input style={{...S.input,flex:"2 1 180px"}} placeholder="Link web (https://...)" value={editWebUrl} onChange={e=>setEditWebUrl(e.target.value)}/>
+                    </div>
+                  )}
                 </div>
               ):(
                 <div style={{fontSize:14,color:isDone?"#aaa":"#222",textDecoration:isDone?"line-through":"none",marginTop:4,lineHeight:1.35}}>{texto}</div>
               )}
             </div>
             {!isEdit&&!isDone&&(
-              <button style={S.btnEdit} onClick={e=>{e.stopPropagation();setEditId(t.id);setEditTexto(texto);setEditFecha(fecha?fecha.split("T")[0]:"");setEditUrgente(urgente)}}>✎</button>
+              <button style={S.btnEdit} onClick={e=>{e.stopPropagation();setEditId(t.id);setEditTexto(texto);setEditFecha(fecha?fecha.split("T")[0]:"");setEditUrgente(urgente);setEditInfo(t.info||"");setEditWebUrl(t.webUrl||"")}}>✎</button>
             )}
           </div>
           {!isEdit&&(
             <div style={{display:"flex",alignItems:"center",gap:7,marginTop:9,paddingTop:8,borderTop:"0.5px solid #ebebeb",flexWrap:"wrap"}}>
               {driveUrl&&<a href={driveUrl} target="_blank" rel="noopener noreferrer" style={S.linkDrive} onClick={e=>e.stopPropagation()}>📁 Drive</a>}
               {pjnUrl&&<a href={pjnUrl} target="_blank" rel="noopener noreferrer" style={S.linkPjn} onClick={e=>e.stopPropagation()}>⚖ PJN</a>}
+              {t.webUrl&&<a href={t.webUrl} target="_blank" rel="noopener noreferrer" style={{...S.linkDrive,color:"#185FA5",borderColor:"#b5d4f4",background:"#E6F1FB"}} onClick={e=>e.stopPropagation()}>🌐 Web</a>}
+              {t.info&&<span style={{fontSize:11,color:"#666",fontStyle:"italic"}}>{t.info}</span>}
               {fecha&&<span style={{fontSize:12,color:"#555",fontWeight:500,whiteSpace:"nowrap",marginLeft:"auto"}}>{formatFecha(fecha)}</span>}
               {!isDone&&(
                 <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
@@ -636,6 +650,7 @@ export default function Home() {
             {j.advertencia&&<div style={{fontSize:11,color:"#A32D2D",marginTop:3,fontWeight:500}}>⚠ {j.advertencia}</div>}
           </div>
           <div style={{display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+            {j.categoria&&<span style={{...S.badge,background:"#F1EFE8",color:"#444441",fontSize:11}}>{j.categoria}</span>}
             <span style={{...S.badge,background:ESTADOS_BG[j.estado]||"#F1EFE8",color:ESTADOS_TX[j.estado]||"#444"}}>{j.estado}</span>
             <button style={S.btnMini} onClick={e=>abrirEditarJuicio(j,e)} title="Editar">✎</button>
             <button style={{...S.btnMini,color:"#E24B4A"}} onClick={e=>eliminarJuicio(j,e)} title="Eliminar">✕</button>
@@ -706,7 +721,7 @@ export default function Home() {
                   </div>
                   {j.datosJuzgado&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Datos del juzgado</div><div style={{fontSize:13}}>{j.datosJuzgado}</div></div>}
                   {j.otraInfo&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Otra información</div><div style={{fontSize:13}}>{j.otraInfo}</div></div>}
-                  {j.compartidoCon&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Compartido con</div><div style={{fontSize:13}}>{j.compartidoCon}</div></div>}
+                  {j.compartidoCon&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Compartido por</div><div style={{fontSize:13}}>{j.compartidoCon}</div></div>}
                   {j.categoria&&<div style={{marginBottom:6}}><div style={S.fieldLabel}>Categoría</div><div style={{fontSize:13}}>{j.categoria}</div></div>}
                 </div>
 
@@ -980,7 +995,7 @@ export default function Home() {
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Advertencia</div><input style={S.inputM} value={formJuicio.advertencia} onChange={fldJ("advertencia")} placeholder="Algo importante a destacar..."/></div>
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Datos del juzgado</div><input style={S.inputM} value={formJuicio.datosJuzgado} onChange={fldJ("datosJuzgado")}/></div>
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>Otra información</div><textarea style={{...S.inputM,height:60,resize:"vertical"}} value={formJuicio.otraInfo} onChange={fldJ("otraInfo")}/></div>
-              <div><div style={S.fieldLabel}>Compartido con</div><input style={S.inputM} value={formJuicio.compartidoCon} onChange={fldJ("compartidoCon")} placeholder="Nombre del colega..."/></div>
+              <div><div style={S.fieldLabel}>Compartido por</div><input style={S.inputM} value={formJuicio.compartidoCon} onChange={fldJ("compartidoCon")} placeholder="Nombre del colega..."/></div>
               <div><div style={S.fieldLabel}>Categoría</div><input style={S.inputM} value={formJuicio.categoria} onChange={fldJ("categoria")} placeholder="Ej: Familia, Laboral..."/></div>
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>📁 Link Drive</div><input style={S.inputM} value={formJuicio.driveUrl} onChange={fldJ("driveUrl")} placeholder="https://drive.google.com/..."/></div>
               <div style={{gridColumn:"1 / -1"}}><div style={S.fieldLabel}>⚖ Link PJN (expediente)</div><input style={S.inputM} value={formJuicio.pjnUrl} onChange={fldJ("pjnUrl")} placeholder="https://scw.pjn.gov.ar/..."/></div>
@@ -1222,45 +1237,55 @@ export default function Home() {
             {/* Panel Honorarios */}
             {!loading&&panel==="honorarios"&&(
               <div>
-                {honorariosPendientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay honorarios pendientes.</div>:honorariosPendientes.map((h,i)=>{
-                  const hc = h.estado==="Pago Parcial"?"#185FA5":"#633806"
-                  const hb = h.estado==="Pago Parcial"?"#E6F1FB":"#FAEEDA"
-                  return (
-                    <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,marginBottom:8,background:"#fff"}}>
-                      <div style={{width:5,flexShrink:0,background:hc,borderRadius:"12px 0 0 12px"}}/>
-                      <div style={{flex:1,padding:"12px 14px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                          <div style={{fontSize:14,fontWeight:500,color:FRANJA["Casos y Juicios"]}}>{(h as any).autos}</div>
-                          <span style={{...S.badge,background:hb,color:hc,flexShrink:0}}>{h.estado}</span>
+                {honorariosPendientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay honorarios pendientes.</div>:(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
+                    {honorariosPendientes.map((h,i)=>{
+                      const hc = h.estado==="Pago Parcial"?"#185FA5":"#633806"
+                      const hb = h.estado==="Pago Parcial"?"#E6F1FB":"#FAEEDA"
+                      return (
+                        <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,background:"#fff"}}>
+                          <div style={{width:5,flexShrink:0,background:hc,borderRadius:"12px 0 0 12px"}}/>
+                          <div style={{flex:1,padding:"12px 14px"}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:4}}>
+                              <div style={{fontSize:14,fontWeight:500,color:FRANJA["Casos y Juicios"],lineHeight:1.3}}>{(h as any).autos}</div>
+                              <span style={{...S.badge,background:hb,color:hc,flexShrink:0}}>{h.estado}</span>
+                            </div>
+                            <div style={{fontSize:13,color:"#333",marginBottom:3}}>{h.clienteContraparte}</div>
+                            <div style={{display:"flex",gap:12,flexWrap:"wrap" as const}}>
+                              {h.total&&<span style={{fontSize:12,color:"#888"}}>Total: <strong style={{color:"#333"}}>{h.total}</strong></span>}
+                              {h.pagado&&<span style={{fontSize:12,color:"#888"}}>Pagado: <strong style={{color:"#333"}}>{h.pagado}</strong></span>}
+                            </div>
+                            {h.observaciones&&<div style={{fontSize:11,color:"#aaa",marginTop:4}}>{h.observaciones}</div>}
+                          </div>
                         </div>
-                        <div style={{fontSize:13,color:"#333",marginTop:4}}>{h.clienteContraparte}</div>
-                        <div style={{fontSize:12,color:"#888",marginTop:3}}>{h.total?`Total: ${h.total}`:""}{h.pagado?` · Pagado: ${h.pagado}`:""}</div>
-                        {h.observaciones&&<div style={{fontSize:11,color:"#aaa",marginTop:2}}>{h.observaciones}</div>}
-                      </div>
-                    </div>
-                  )
-                })}
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Panel Clientes */}
             {!loading&&panel==="clientes"&&(
               <div>
-                {todosClientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay clientes cargados.</div>:
-                [...todosClientes].sort((a,b)=>a.apellido.localeCompare(b.apellido,"es")).map((c,i)=>(
-                  <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,marginBottom:8,background:"#fff"}}>
-                    <div style={{width:5,flexShrink:0,background:"#8B5E3C",borderRadius:"12px 0 0 12px"}}/>
-                    <div style={{flex:1,padding:"12px 14px"}}>
-                      <div style={{fontSize:14,fontWeight:500,color:"#6B4226",marginBottom:4}}>{c.apellido}, {c.nombre}</div>
-                      <div style={{display:"flex",gap:16,flexWrap:"wrap" as const}}>
-                        {c.dni&&<span style={{fontSize:12,color:"#555"}}>DNI: {c.dni}</span>}
-                        {c.correo&&<span style={{fontSize:12,color:"#555"}}>✉ {c.correo}</span>}
-                        {c.telefono&&<span style={{fontSize:12,color:"#555"}}>📞 {c.telefono}</span>}
-                        {c.domicilio&&<span style={{fontSize:12,color:"#555"}}>📍 {c.domicilio}</span>}
+                {todosClientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay clientes cargados.</div>:(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
+                    {[...todosClientes].sort((a,b)=>a.apellido.localeCompare(b.apellido,"es")).map((c,i)=>(
+                      <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,background:"#fff"}}>
+                        <div style={{width:5,flexShrink:0,background:"#8B5E3C",borderRadius:"12px 0 0 12px"}}/>
+                        <div style={{flex:1,padding:"12px 14px"}}>
+                          <div style={{fontSize:14,fontWeight:500,color:"#6B4226",marginBottom:6}}>{c.apellido}, {c.nombre}</div>
+                          <div style={{display:"flex",flexDirection:"column" as const,gap:3}}>
+                            {c.dni&&<span style={{fontSize:12,color:"#555"}}>DNI: {c.dni}</span>}
+                            {c.correo&&<span style={{fontSize:12,color:"#555"}}>✉ {c.correo}</span>}
+                            {c.telefono&&<span style={{fontSize:12,color:"#555"}}>📞 {c.telefono}</span>}
+                            {c.domicilio&&<span style={{fontSize:12,color:"#555"}}>📍 {c.domicilio}</span>}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
