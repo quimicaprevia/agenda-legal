@@ -153,14 +153,23 @@ export default function Home() {
     .filter(t=>!(t.juicioId&&inactivosSet.has(t.juicioId)))
     .map(t=>({...t,...(cambios[t.id]||{})}))
 
+  // recienCompletadas: tareas que se marcaron done en esta sesión (cambios) pero aún están en vistaCongelada
+  // Se muestran tachadas/opacas en su sección original hasta que se presione "Actualizar vista"
+  const recienCompletadas = vistaActual.filter(t=>t.done&&cambios[t.id]?.done===true)
+
   const urgentesArriba = vistaActual.filter(t=>!t.done&&t.urgente&&(esAtrasada(t)||esHoy_(t)))
+  // Para cada sección incluimos también las recién completadas que "pertenecían" a ella
+  const urgentesCompletadas = recienCompletadas.filter(t=>t.urgente&&(esAtrasada(t)||esHoy_(t)))
   const atrasadas      = vistaActual.filter(t=>!t.done&&esAtrasada(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const atrasadasCompletadas = recienCompletadas.filter(t=>esAtrasada(t)&&!urgentesCompletadas.find(u=>u.id===t.id))
   const vencenHoy      = vistaActual.filter(t=>!t.done&&esHoy_(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const vencenHoyCompletadas = recienCompletadas.filter(t=>esHoy_(t)&&!urgentesCompletadas.find(u=>u.id===t.id))
   const proximas       = vistaActual.filter(t=>!t.done&&esProxima(t)&&!urgentesArriba.find(u=>u.id===t.id))
+  const proximasCompletadas = recienCompletadas.filter(t=>esProxima(t))
   const hayPendientes  = Object.keys(cambios).length > 0
 
   const tareasFiltradas = vistaActual
-    .filter(t=>!t.done&&(filtroTipos.length===0||filtroTipos.includes(t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios")))
+    .filter(t=>(filtroTipos.length===0||filtroTipos.includes(t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios")))
     .sort((a,b)=>{
       if(a.urgente&&!b.urgente)return -1; if(!a.urgente&&b.urgente)return 1
       if(!a.fecha&&!b.fecha)return 0; if(!a.fecha)return 1; if(!b.fecha)return -1
@@ -491,12 +500,13 @@ export default function Home() {
     )
   }
 
-  const seccion = (label:string, items:Tarea[], color?:string) => {
-    if(items.length===0)return null
+  const seccion = (label:string, items:Tarea[], completadas:Tarea[], color?:string) => {
+    const todas = [...items, ...completadas]
+    if(todas.length===0)return null
     return (
       <div key={label}>
         <div style={{...S.sectionLabel,color:color||"#888"}}>{label}</div>
-        {items.map(t=>renderTarea(t))}
+        {todas.map(t=>renderTarea(t))}
       </div>
     )
   }
@@ -997,15 +1007,15 @@ export default function Home() {
             {!loading&&panel==="tareas"&&(
               <div>
                 {filtroTipos.length>0?(
-                  tareasFiltradas.length===0
+                  tareasFiltradas.length===0&&recienCompletadas.filter(t=>filtroTipos.includes(t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios")).length===0
                     ?<div style={{color:"#aaa",fontSize:14}}>No hay tareas.</div>
-                    :tareasFiltradas.map(t=>renderTarea(t))
+                    :[...tareasFiltradas,...recienCompletadas.filter(t=>filtroTipos.includes(t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios"))].map(t=>renderTarea(t))
                 ):<>
-                  {seccion("URGENTES",urgentesArriba,"#E24B4A")}
-                  {seccion("ATRASADAS",atrasadas,"#9B59B6")}
-                  {seccion("HOY",vencenHoy,"#378ADD")}
-                  {seccion("PRÓXIMAS TAREAS",proximas,"#555")}
-                  {vistaActual.filter(t=>!t.done).length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
+                  {seccion("URGENTES",urgentesArriba,urgentesCompletadas,"#E24B4A")}
+                  {seccion("ATRASADAS",atrasadas,atrasadasCompletadas,"#9B59B6")}
+                  {seccion("HOY",vencenHoy,vencenHoyCompletadas,"#378ADD")}
+                  {seccion("PRÓXIMAS TAREAS",proximas,proximasCompletadas,"#555")}
+                  {vistaActual.filter(t=>!t.done).length===0&&recienCompletadas.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
                 </>}
               </div>
             )}
