@@ -938,7 +938,7 @@ export default function Home() {
 
         {/* Tareas — destacado en azul */}
         <div
-          style={{padding:"8px 14px",cursor:"pointer",fontSize:14,fontWeight:500,color: panel==="tareas"?"#185FA5":"#378ADD",borderLeft: panel==="tareas"?"2px solid #378ADD":"2px solid transparent",background: panel==="tareas"?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+          style={{padding:"8px 14px",cursor:"pointer",fontSize:15,fontWeight:500,color: panel==="tareas"?"#185FA5":"#378ADD",borderLeft: panel==="tareas"?"2px solid #378ADD":"2px solid transparent",background: panel==="tareas"?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}
           onClick={()=>setPanel("tareas")}
         >
           Tareas
