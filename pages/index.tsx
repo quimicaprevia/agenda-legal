@@ -77,9 +77,9 @@ export default function Home() {
   // Filtros
   const [filtroTipos, setFiltroTipos]         = useState<string[]>([])
   const [filtroEstados, setFiltroEstados]     = useState<string[]>([])
-  const [filtroAsuntos, setFiltroAsuntos]     = useState<"Abierta"|"Cerrada"|"">("")
+  const [filtroAsuntos, setFiltroAsuntos]     = useState<string>("")
   const [filtroCategoria, setFiltroCategoria] = useState<string>("")
-  const [ordenPrueba, setOrdenPrueba]         = useState<"tipo"|"estado"|"">()
+  const [ordenPrueba, setOrdenPrueba]         = useState<string>("")
 
   // Panel derecho (tareas)
   const [panelDerechoVisible, setPanelDerechoVisible] = useState(true)
@@ -735,8 +735,8 @@ export default function Home() {
                 {j.pruebas.length>0&&(
                   <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
                     <span style={{fontSize:11,color:"#888",alignSelf:"center"}}>Ordenar:</span>
-                    <button style={{...S.filterBtn,...(ordenPrueba==="tipo"?S.filterBtnActive:{})}} onClick={()=>setOrdenPrueba((p:any)=>p==="tipo"?"":"tipo")}>Tipo</button>
-                    <button style={{...S.filterBtn,...(ordenPrueba==="estado"?S.filterBtnActive:{})}} onClick={()=>setOrdenPrueba((p:any)=>p==="estado"?"":"estado")}>Estado</button>
+                    <button style={{...S.filterBtn,...(ordenPrueba==="tipo"?S.filterBtnActive:{})}} onClick={()=>setOrdenPrueba(ordenPrueba==="tipo"?"":"tipo")}>Tipo</button>
+                    <button style={{...S.filterBtn,...(ordenPrueba==="estado"?S.filterBtnActive:{})}} onClick={()=>setOrdenPrueba(ordenPrueba==="estado"?"":"estado")}>Estado</button>
                   </div>
                 )}
                 {j.pruebas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin pruebas cargadas</div>}
@@ -1116,7 +1116,7 @@ export default function Home() {
 
           {(panel==="probono"||panel==="docencia"||panel==="consultoria")&&<div style={{display:"flex",gap:6,alignItems:"center"}}>
             {["Abierta","Cerrada"].map(e=>(
-              <button key={e} style={{...S.filterBtn,...(filtroAsuntos===e?S.filterBtnActive:{})}} onClick={()=>setFiltroAsuntos((p:any)=>p===e?"":e)}>{e}</button>
+              <button key={e} style={{...S.filterBtn,...(filtroAsuntos===e?S.filterBtnActive:{})}} onClick={()=>setFiltroAsuntos(filtroAsuntos===e?"":e)}>{e}</button>
             ))}
             {filtroAsuntos&&<button style={{...S.filterBtn,color:"#888"}} onClick={()=>setFiltroAsuntos("")}>✕</button>}
             <button style={S.btnPrimary} onClick={()=>abrirNuevoAsunto(panel)}>+ Nuevo asunto</button>
