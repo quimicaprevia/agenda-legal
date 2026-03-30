@@ -1110,6 +1110,17 @@ export default function Home() {
                   <div key={t.id} style={{...S.card,opacity:0.6,marginBottom:4}}>
                     <div style={S.cardHeader}>
                       <div style={{...S.check,...S.checkDone}} onClick={()=>toggleDone(t,true)}>✓</div>
+                      <div style={{flex:1,marginLeft:8,fontSize:13,textDecoration:"line-through",color:"#aaa"}}>{t.texto}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // ─── STATS JUICIOS ────────────────────────────────────────────────────────────
   const ACTIVOS_ESTADOS = TODOS_ESTADOS_JUICIO.filter(e=>!INACTIVOS.includes(e))
