@@ -321,13 +321,19 @@ export default function Home() {
     setPosponerOpen(null); setPosponerFecha("")
   }
 
-  const guardarEdicion = (t:Tarea) => {
+  const guardarEdicion = (t:Tarea, inmediato=false) => {
     const body:any = {id:t.id,texto:editTexto,urgente:editUrgente,fecha:editFecha||null}
     if(t.tipo==="Personales"){body.info=editInfo;body.webUrl=editWebUrl}
     fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
-    const cambio:Partial<Tarea> = {texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}
-    if(t.tipo==="Personales"){cambio.info=editInfo;cambio.webUrl=editWebUrl}
-    setCambios(p=>({...p,[t.id]:{...p[t.id],...cambio}}))
+    if (inmediato) {
+      setTareas(ts=>ts.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}:x))
+      setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}:x)})))
+      setAsuntos(as=>as.map(a=>({...a,tareas:a.tareas.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}:x)})))
+    } else {
+      const cambio:Partial<Tarea> = {texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}
+      if(t.tipo==="Personales"){cambio.info=editInfo;cambio.webUrl=editWebUrl}
+      setCambios(p=>({...p,[t.id]:{...p[t.id],...cambio}}))
+    }
     setEditId(null)
   }
 
@@ -417,11 +423,13 @@ export default function Home() {
   }
 
   // ─── ACCIONES TAREAS DE JUICIO ───────────────────────────────────────────────
-  const agregarTareaJuicio = async (juicioId:string) => {
+  const agregarTareaJuicio = async (juicioId:string, textoDirecto?:string, fechaDirecta?:string) => {
     const nt = ntMap[juicioId]||{texto:"",fecha:"",urgente:false}
-    if (!nt.texto.trim()) return
-    const body:any={texto:nt.texto,juicioId,urgente:nt.urgente,tipo:"Juicio"}
-    if(nt.fecha) body.fecha=nt.fecha
+    const texto = textoDirecto ?? nt.texto
+    const fecha = fechaDirecta ?? nt.fecha
+    if (!texto.trim()) return
+    const body:any={texto,juicioId,urgente:nt.urgente,tipo:"Juicio"}
+    if(fecha) body.fecha=fecha
     const res = await fetch("/api/tareas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
     if(!res.ok){alert("Error al agregar tarea");return}
     const t = await res.json()
@@ -432,11 +440,13 @@ export default function Home() {
   }
 
   // ─── ACCIONES TAREAS DE ASUNTO ───────────────────────────────────────────────
-  const agregarTareaAsunto = async (asuntoId:string, tipo:string) => {
+  const agregarTareaAsunto = async (asuntoId:string, tipo:string, textoDirecto?:string, fechaDirecta?:string) => {
     const nt = ntaMap[asuntoId]||{texto:"",fecha:"",urgente:false}
-    if (!nt.texto.trim()) return
-    const body:any={texto:nt.texto,asuntoId,urgente:nt.urgente,tipo}
-    if(nt.fecha) body.fecha=nt.fecha
+    const texto = textoDirecto ?? nt.texto
+    const fecha = fechaDirecta ?? nt.fecha
+    if (!texto.trim()) return
+    const body:any={texto,asuntoId,urgente:nt.urgente,tipo}
+    if(fecha) body.fecha=fecha
     const res = await fetch("/api/tareas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
     if(!res.ok){alert("Error al agregar tarea");return}
     const t = await res.json()
@@ -534,13 +544,18 @@ export default function Home() {
   const descargarBackup = async () => {
     try {
       const res = await fetch("/api/backup")
-      if(!res.ok){alert("Error al generar backup");return}
+      if(!res.ok){
+        const txt = await res.text().catch(()=>"")
+        alert(`Error al generar backup (${res.status}): ${txt||"sin detalle"}`)
+        return
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href=url; a.download=`backup-agenda-legal-${new Date().toISOString().split("T")[0]}.xlsx`
-      a.click(); URL.revokeObjectURL(url)
-    } catch { alert("Error al descargar backup") }
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch(e:any) { alert(`Error al descargar backup: ${e?.message||e}`) }
   }
 
   // ─── RENDER: TAREA (panel tareas) ────────────────────────────────────────────
@@ -721,9 +736,14 @@ export default function Home() {
           )}
           <div style={{marginTop:14,paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
             <div style={S.fieldLabel}>NUEVA TAREA</div>
-            <input style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} placeholder="Texto de la tarea..." value={ntPanel.texto} onChange={e=>setNtPanel(p=>({...p,texto:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&ntPanel.texto.trim()&&agregarTareaAsunto(asuntoPanel.id,tipoLabel).then(()=>setNtPanel({texto:"",fecha:""}))}/>
+            <input style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} placeholder="Texto de la tarea..." value={ntPanel.texto} onChange={e=>setNtPanel(p=>({...p,texto:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"&&ntPanel.texto.trim()){const txt=ntPanel.texto,fch=ntPanel.fecha;setNtPanel({texto:"",fecha:""});agregarTareaAsunto(asuntoPanel.id,tipoLabel,txt,fch)}}}/>
             <input type="date" style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} value={ntPanel.fecha} onChange={e=>setNtPanel(p=>({...p,fecha:e.target.value}))}/>
-            <button style={{...S.btnPrimary,width:"100%",marginTop:6}} onClick={()=>{if(!ntPanel.texto.trim())return;const id=asuntoPanel.id;const tipo=tipoLabel;setNtaMap(p=>({...p,[id]:{texto:ntPanel.texto,fecha:ntPanel.fecha,urgente:false}}));agregarTareaAsunto(id,tipo).then(()=>setNtPanel({texto:"",fecha:""}));}}>+ Agregar tarea</button>
+            <button style={{...S.btnPrimary,width:"100%",marginTop:6}} onClick={()=>{
+              if(!ntPanel.texto.trim())return
+              const txt=ntPanel.texto, fch=ntPanel.fecha
+              setNtPanel({texto:"",fecha:""})
+              agregarTareaAsunto(asuntoPanel.id,tipoLabel,txt,fch)
+            }}>+ Agregar tarea</button>
           </div>
         </div>
       )
@@ -757,7 +777,12 @@ export default function Home() {
             <div style={S.fieldLabel}>NUEVA TAREA</div>
             <input style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} placeholder="Texto de la tarea..." value={ntPanel.texto} onChange={e=>setNtPanel(p=>({...p,texto:e.target.value}))}/>
             <input type="date" style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} value={ntPanel.fecha} onChange={e=>setNtPanel(p=>({...p,fecha:e.target.value}))}/>
-            <button style={{...S.btnPrimary,width:"100%",marginTop:6}} onClick={()=>{if(!ntPanel.texto.trim())return;setNtMap(p=>({...p,[juicioPanel.id]:{texto:ntPanel.texto,fecha:ntPanel.fecha,urgente:false}}));agregarTareaJuicio(juicioPanel.id).then(()=>setNtPanel({texto:"",fecha:""}));}}>+ Agregar tarea</button>
+            <button style={{...S.btnPrimary,width:"100%",marginTop:6}} onClick={()=>{
+              if(!ntPanel.texto.trim())return
+              const txt=ntPanel.texto, fch=ntPanel.fecha
+              setNtPanel({texto:"",fecha:""})
+              agregarTareaJuicio(juicioPanel.id,txt,fch)
+            }}>+ Agregar tarea</button>
           </div>
         </div>
       )
@@ -784,7 +809,10 @@ export default function Home() {
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:500,lineHeight:1.35,color:FRANJA["Casos y Juicios"]}}>{j.autos}</div>
             <div style={S.cardMeta}>
-              {primerCliente?`${primerCliente.apellido}, ${primerCliente.nombre}`:`${j.nro&&j.nro!=="Iniciar"?`Expte. ${j.nro} · `:""}${j.fuero||""}${j.juzgado?` · Juz. ${parseInt(j.juzgado)||j.juzgado}`:""}`}
+              {(j.clientes||[]).length>0
+                ? (j.clientes||[]).map(c=>`${c.apellido}, ${c.nombre}`).join(" · ")
+                : `${j.nro&&j.nro!=="Iniciar"?`Expte. ${j.nro} · `:""}${j.fuero||""}${j.juzgado?` · Juz. ${parseInt(j.juzgado)||j.juzgado}`:""}`
+              }
             </div>
             {j.advertencia&&<div style={{fontSize:11,color:"#A32D2D",marginTop:3,fontWeight:500}}>⚠ {j.advertencia}</div>}
           </div>
@@ -833,7 +861,7 @@ export default function Home() {
                         <input style={{...S.input,flex:"3 1 180px"}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
                         <input type="date" style={{...S.input,flex:"1 1 130px"}} value={editFecha} onChange={e=>setEditFecha(e.target.value)}/>
                         <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente</label>
-                        <button style={S.btnPrimary} onClick={()=>guardarEdicion(t)}>Guardar</button>
+                        <button style={S.btnPrimary} onClick={()=>guardarEdicion(t,true)}>Guardar</button>
                         <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
                       </div>
                     )}
@@ -1058,7 +1086,7 @@ export default function Home() {
                     <input style={{...S.input,flex:"3 1 180px"}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
                     <input type="date" style={{...S.input,flex:"1 1 130px"}} value={editFecha} onChange={e=>setEditFecha(e.target.value)}/>
                     <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente</label>
-                    <button style={S.btnPrimary} onClick={()=>guardarEdicion(t)}>Guardar</button>
+                    <button style={S.btnPrimary} onClick={()=>guardarEdicion(t,true)}>Guardar</button>
                     <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
                   </div>
                 )}
@@ -1084,10 +1112,10 @@ export default function Home() {
                       <div style={{...S.check,...S.checkDone}} onClick={()=>toggleDone(t,true)}>✓</div>
 
   // ─── STATS JUICIOS ────────────────────────────────────────────────────────────
-  const statsPorEstado = TODOS_ESTADOS_JUICIO.map(e=>({
-    estado: e,
-    count: juicios.filter(j=>j.estado===e).length
-  })).filter(s=>s.count>0)
+  const ACTIVOS_ESTADOS = TODOS_ESTADOS_JUICIO.filter(e=>!INACTIVOS.includes(e))
+  const statsPorEstado = ACTIVOS_ESTADOS.map(e=>({estado:e, count:juicios.filter(j=>j.estado===e).length})).filter(s=>s.count>0)
+  const statsInactivos = INACTIVOS.map(e=>({estado:e, count:juicios.filter(j=>j.estado===e).length})).filter(s=>s.count>0)
+  const statsPorCategoria = categoriasJuicios.map(c=>({categoria:c, count:juicios.filter(j=>j.categoria===c&&!INACTIVOS.includes(j.estado)).length})).filter(s=>s.count>0)
 
   // ─── FORM HELPERS ─────────────────────────────────────────────────────────────
   const fldJ = (k:keyof JuicioForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setFormJuicio(p=>({...p,[k]:e.target.value}))
@@ -1299,21 +1327,43 @@ export default function Home() {
                 </div>
                 {/* Barra lateral de stats */}
                 {statsVisible&&(
-                  <div style={{width:180,flexShrink:0,background:"#f9f9f8",border:"0.5px solid #e5e7eb",borderRadius:12,padding:"14px 16px",position:"sticky",top:0}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{width:190,flexShrink:0,background:"#f9f9f8",border:"0.5px solid #e5e7eb",borderRadius:12,padding:"14px 16px",position:"sticky",top:0,overflowY:"auto",maxHeight:"calc(100vh - 120px)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                       <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em"}}>POR ESTADO</div>
                       <button style={{...S.btnMini,fontSize:10}} onClick={()=>setStatsVisible(false)}>✕</button>
                     </div>
                     {statsPorEstado.map(s=>(
-                      <div key={s.estado} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"0.5px solid #ebebeb"}}>
+                      <div key={s.estado} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"0.5px solid #ebebeb"}}>
                         <span style={{fontSize:12,color:"#555"}}>{s.estado}</span>
-                        <span style={{fontSize:13,fontWeight:600,color:ESTADOS_TX[s.estado]||"#111",background:ESTADOS_BG[s.estado]||"#f0f0f0",padding:"1px 8px",borderRadius:8}}>{s.count}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:ESTADOS_TX[s.estado]||"#111",background:ESTADOS_BG[s.estado]||"#f0f0f0",padding:"1px 7px",borderRadius:8}}>{s.count}</span>
                       </div>
                     ))}
-                    <div style={{marginTop:10,paddingTop:8,borderTop:"0.5px solid #e5e7eb",display:"flex",justifyContent:"space-between"}}>
-                      <span style={{fontSize:12,color:"#888"}}>Total</span>
-                      <span style={{fontSize:13,fontWeight:600}}>{juicios.length}</span>
+                    <div style={{marginTop:8,paddingTop:6,borderTop:"0.5px solid #e5e7eb",display:"flex",justifyContent:"space-between",marginBottom:12}}>
+                      <span style={{fontSize:12,color:"#888"}}>Activos</span>
+                      <span style={{fontSize:12,fontWeight:600}}>{juicios.filter(j=>!INACTIVOS.includes(j.estado)).length}</span>
                     </div>
+                    {statsInactivos.length>0&&<>
+                      <div style={{fontSize:11,fontWeight:600,color:"#aaa",letterSpacing:"0.06em",marginBottom:6}}>CERRADOS</div>
+                      {statsInactivos.map(s=>(
+                        <div key={s.estado} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"0.5px solid #ebebeb"}}>
+                          <span style={{fontSize:12,color:"#aaa"}}>{s.estado}</span>
+                          <span style={{fontSize:12,fontWeight:600,color:ESTADOS_TX[s.estado]||"#aaa",background:ESTADOS_BG[s.estado]||"#f0f0f0",padding:"1px 7px",borderRadius:8}}>{s.count}</span>
+                        </div>
+                      ))}
+                      <div style={{marginTop:8,paddingTop:6,borderTop:"0.5px solid #e5e7eb",display:"flex",justifyContent:"space-between",marginBottom:12}}>
+                        <span style={{fontSize:12,color:"#aaa"}}>Total</span>
+                        <span style={{fontSize:12,fontWeight:600,color:"#aaa"}}>{juicios.length}</span>
+                      </div>
+                    </>}
+                    {statsPorCategoria.length>0&&<>
+                      <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em",marginBottom:6}}>POR CATEGORÍA</div>
+                      {statsPorCategoria.map(s=>(
+                        <div key={s.categoria} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"0.5px solid #ebebeb"}}>
+                          <span style={{fontSize:12,color:"#555"}}>{s.categoria}</span>
+                          <span style={{fontSize:12,fontWeight:600,color:"#444441",background:"#F1EFE8",padding:"1px 7px",borderRadius:8}}>{s.count}</span>
+                        </div>
+                      ))}
+                    </>}
                   </div>
                 )}
                 {!statsVisible&&(
