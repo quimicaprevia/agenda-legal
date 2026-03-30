@@ -183,23 +183,24 @@ export default function Home() {
     .filter(t=>!(t.juicioId&&inactivosSet.has(t.juicioId)))
     .map(t=>({...t,...(cambios[t.id]||{})}))
 
-  // Para calcular en QUÉ SECCIÓN va cada tarea, usamos la fecha ORIGINAL (vistaCongelada)
-  // así posponer no mueve la tarea hasta "Actualizar Vista"
+  // Para calcular en QUÉ SECCIÓN va cada tarea, usamos fecha y done ORIGINALES (vistaCongelada)
+  // así ni posponer ni completar mueven la tarea hasta "Actualizar Vista"
   const vistaParaSecciones = vistaCongelada
     .filter(t=>!(t.juicioId&&inactivosSet.has(t.juicioId)))
-    .map(t=>({...t, urgente: cambios[t.id]?.urgente ?? t.urgente, done: cambios[t.id]?.done ?? t.done}))
+    .map(t=>({...t, urgente: cambios[t.id]?.urgente ?? t.urgente}))
+    // done siempre false aquí — todas las tareas de vistaCongelada eran activas al congelar
 
-  // recienCompletadas: tareas que se marcaron done en esta sesión
+  // recienCompletadas ya no se necesita como lista separada — seccion las renderiza con vistaActual
   const recienCompletadas = vistaActual.filter(t=>t.done&&cambios[t.id]?.done===true)
 
-  const urgentesArriba = vistaParaSecciones.filter(t=>!t.done&&t.urgente)
-  const urgentesCompletadas = recienCompletadas.filter(t=>t.urgente)
-  const atrasadas      = vistaParaSecciones.filter(t=>!t.done&&!t.urgente&&esAtrasada(t))
-  const atrasadasCompletadas = recienCompletadas.filter(t=>!t.urgente&&esAtrasada(t))
-  const vencenHoy      = vistaParaSecciones.filter(t=>!t.done&&!t.urgente&&esHoy_(t))
-  const vencenHoyCompletadas = recienCompletadas.filter(t=>!t.urgente&&esHoy_(t))
-  const proximas       = vistaParaSecciones.filter(t=>!t.done&&!t.urgente&&esProxima(t))
-  const proximasCompletadas = recienCompletadas.filter(t=>!t.urgente&&esProxima(t))
+  const urgentesArriba = vistaParaSecciones.filter(t=>t.urgente)
+  const urgentesCompletadas: Tarea[] = []
+  const atrasadas      = vistaParaSecciones.filter(t=>!t.urgente&&esAtrasada(t))
+  const atrasadasCompletadas: Tarea[] = []
+  const vencenHoy      = vistaParaSecciones.filter(t=>!t.urgente&&esHoy_(t))
+  const vencenHoyCompletadas: Tarea[] = []
+  const proximas       = vistaParaSecciones.filter(t=>!t.urgente&&esProxima(t))
+  const proximasCompletadas: Tarea[] = []
   const hayPendientes  = Object.keys(cambios).length > 0
 
   const tareasFiltradas = vistaActual
