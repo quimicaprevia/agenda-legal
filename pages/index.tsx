@@ -1123,10 +1123,6 @@ export default function Home() {
   }
 
   // ─── STATS JUICIOS ────────────────────────────────────────────────────────────
-  const ACTIVOS_ESTADOS = TODOS_ESTADOS_JUICIO.filter(e=>!INACTIVOS.includes(e))
-  const statsPorEstado = ACTIVOS_ESTADOS.map(e=>({estado:e, count:juicios.filter(j=>j.estado===e).length})).filter(s=>s.count>0)
-  const statsInactivos = INACTIVOS.map(e=>({estado:e, count:juicios.filter(j=>j.estado===e).length})).filter(s=>s.count>0)
-  const statsPorCategoria = categoriasJuicios.map(c=>({categoria:c, count:juicios.filter(j=>j.categoria===c&&!INACTIVOS.includes(j.estado)).length})).filter(s=>s.count>0)
 
   // ─── FORM HELPERS ─────────────────────────────────────────────────────────────
   const fldJ = (k:keyof JuicioForm) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setFormJuicio(p=>({...p,[k]:e.target.value}))
@@ -1137,6 +1133,10 @@ export default function Home() {
   const asuntosConsultoria = asuntos.filter(a=>a.tipo==="consultoria"&&(filtroAsuntos===""||a.estado===filtroAsuntos))
   const tareasPersonales   = vistaActual.filter(t=>t.tipo==="Personales"&&!t.done)
   const categoriasJuicios  = Array.from(new Set(juicios.map(j=>j.categoria).filter(Boolean))) as string[]
+  const ACTIVOS_ESTADOS = TODOS_ESTADOS_JUICIO.filter(e=>!INACTIVOS.includes(e))
+  const statsPorEstado = ACTIVOS_ESTADOS.map(e=>({estado:e, count:juicios.filter(j=>j.estado===e).length})).filter(s=>s.count>0)
+  const statsInactivos = INACTIVOS.map(e=>({estado:e, count:juicios.filter(j=>j.estado===e).length})).filter(s=>s.count>0)
+  const statsPorCategoria = categoriasJuicios.map(c=>({categoria:c, count:juicios.filter(j=>j.categoria===c&&!INACTIVOS.includes(j.estado)).length})).filter(s=>s.count>0)
 
   // ─── RENDER PRINCIPAL ─────────────────────────────────────────────────────────
   return (
