@@ -676,11 +676,17 @@ export default function Home() {
   }
 
   const seccion = (label:string, items:Tarea[], completadas:Tarea[], color?:string) => {
-    // Renderizar con datos de vistaActual para mostrar cambios visuales (fecha nueva, etc.)
     const idsItems = new Set(items.map(t=>t.id))
     const idsComp  = new Set(completadas.map(t=>t.id))
-    const itemsConDatos = vistaActual.filter(t=>idsItems.has(t.id))
+    let itemsConDatos = vistaActual.filter(t=>idsItems.has(t.id))
     const compConDatos  = vistaActual.filter(t=>idsComp.has(t.id))
+    // PRÓXIMAS: ordenar solo por fecha, urgente no prioriza aquí
+    if (label==="PRÓXIMAS TAREAS") {
+      itemsConDatos = [...itemsConDatos].sort((a,b)=>{
+        if(!a.fecha&&!b.fecha)return 0; if(!a.fecha)return 1; if(!b.fecha)return -1
+        return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()
+      })
+    }
     const todas = [...itemsConDatos, ...compConDatos]
     if(todas.length===0)return null
     return (
