@@ -113,6 +113,20 @@ export default function Home() {
   // Nueva tarea desde panel derecho
   const [ntPanel, setNtPanel] = useState({texto:"",fecha:""})
 
+  // Cerrar calendario al clickear afuera
+  useEffect(() => {
+    if (!posponerOpen) return
+    const handler = (e:MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest(".calendario-posponer")) {
+        setPosponerOpen(null)
+        setPosponerFecha("")
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [posponerOpen])
+
   useEffect(() => {
     if (expandido) {
       setTimeout(() => {
@@ -164,24 +178,28 @@ export default function Home() {
   const esHoy_     = (t:Tarea) => { if(!t.fecha)return false; return parseFecha(t.fecha).getTime()===hoy.getTime() }
   const esProxima  = (t:Tarea) => !esAtrasada(t)&&!esHoy_(t)
 
-  // Vista congelada con cambios aplicados visualmente
+  // Vista congelada con cambios aplicados visualmente (para mostrar texto, urgente, done)
   const vistaActual = vistaCongelada
     .filter(t=>!(t.juicioId&&inactivosSet.has(t.juicioId)))
     .map(t=>({...t,...(cambios[t.id]||{})}))
 
-  // recienCompletadas: tareas que se marcaron done en esta sesión (cambios) pero aún están en vistaCongelada
-  // Se muestran tachadas/opacas en su sección original hasta que se presione "Actualizar vista"
+  // Para calcular en QUÉ SECCIÓN va cada tarea, usamos la fecha ORIGINAL (vistaCongelada)
+  // así posponer no mueve la tarea hasta "Actualizar Vista"
+  const vistaParaSecciones = vistaCongelada
+    .filter(t=>!(t.juicioId&&inactivosSet.has(t.juicioId)))
+    .map(t=>({...t, urgente: cambios[t.id]?.urgente ?? t.urgente, done: cambios[t.id]?.done ?? t.done}))
+
+  // recienCompletadas: tareas que se marcaron done en esta sesión
   const recienCompletadas = vistaActual.filter(t=>t.done&&cambios[t.id]?.done===true)
 
-  const urgentesArriba = vistaActual.filter(t=>!t.done&&t.urgente&&(esAtrasada(t)||esHoy_(t)))
-  // Para cada sección incluimos también las recién completadas que "pertenecían" a ella
-  const urgentesCompletadas = recienCompletadas.filter(t=>t.urgente&&(esAtrasada(t)||esHoy_(t)))
-  const atrasadas      = vistaActual.filter(t=>!t.done&&esAtrasada(t)&&!urgentesArriba.find(u=>u.id===t.id))
-  const atrasadasCompletadas = recienCompletadas.filter(t=>esAtrasada(t)&&!urgentesCompletadas.find(u=>u.id===t.id))
-  const vencenHoy      = vistaActual.filter(t=>!t.done&&esHoy_(t)&&!urgentesArriba.find(u=>u.id===t.id))
-  const vencenHoyCompletadas = recienCompletadas.filter(t=>esHoy_(t)&&!urgentesCompletadas.find(u=>u.id===t.id))
-  const proximas       = vistaActual.filter(t=>!t.done&&esProxima(t)&&!urgentesArriba.find(u=>u.id===t.id))
-  const proximasCompletadas = recienCompletadas.filter(t=>esProxima(t))
+  const urgentesArriba = vistaParaSecciones.filter(t=>!t.done&&t.urgente)
+  const urgentesCompletadas = recienCompletadas.filter(t=>t.urgente)
+  const atrasadas      = vistaParaSecciones.filter(t=>!t.done&&!t.urgente&&esAtrasada(t))
+  const atrasadasCompletadas = recienCompletadas.filter(t=>!t.urgente&&esAtrasada(t))
+  const vencenHoy      = vistaParaSecciones.filter(t=>!t.done&&!t.urgente&&esHoy_(t))
+  const vencenHoyCompletadas = recienCompletadas.filter(t=>!t.urgente&&esHoy_(t))
+  const proximas       = vistaParaSecciones.filter(t=>!t.done&&!t.urgente&&esProxima(t))
+  const proximasCompletadas = recienCompletadas.filter(t=>!t.urgente&&esProxima(t))
   const hayPendientes  = Object.keys(cambios).length > 0
 
   const tareasFiltradas = vistaActual
@@ -542,7 +560,7 @@ export default function Home() {
                     while(celdas.length%7!==0) celdas.push(null)
                     const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
                     return (
-                      <div style={{position:"absolute",top:30,right:0,background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:10,padding:"10px",boxShadow:"0 4px 16px rgba(0,0,0,0.14)",zIndex:200,width:220}}>
+                      <div className="calendario-posponer" style={{position:"absolute",top:30,right:0,background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:10,padding:"10px",boxShadow:"0 4px 16px rgba(0,0,0,0.14)",zIndex:200,width:220}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                           <button style={{...S.btnMini,fontSize:14}} onClick={()=>setPosponerMes(m===0?{y:y-1,m:11}:{y,m:m-1})}>‹</button>
                           <span style={{fontSize:12,fontWeight:500}}>{meses[m]} {y}</span>
@@ -579,7 +597,12 @@ export default function Home() {
   }
 
   const seccion = (label:string, items:Tarea[], completadas:Tarea[], color?:string) => {
-    const todas = [...items, ...completadas]
+    // Renderizar con datos de vistaActual para mostrar cambios visuales (fecha nueva, etc.)
+    const idsItems = new Set(items.map(t=>t.id))
+    const idsComp  = new Set(completadas.map(t=>t.id))
+    const itemsConDatos = vistaActual.filter(t=>idsItems.has(t.id))
+    const compConDatos  = vistaActual.filter(t=>idsComp.has(t.id))
+    const todas = [...itemsConDatos, ...compConDatos]
     if(todas.length===0)return null
     return (
       <div key={label}>
@@ -1198,17 +1221,19 @@ export default function Home() {
             {/* Panel Tareas */}
             {!loading&&panel==="tareas"&&(
               <div>
-                {filtroTipos.length>0?(
-                  tareasFiltradas.length===0&&recienCompletadas.filter(t=>filtroTipos.includes(t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios")).length===0
-                    ?<div style={{color:"#aaa",fontSize:14}}>No hay tareas.</div>
-                    :[...tareasFiltradas,...recienCompletadas.filter(t=>filtroTipos.includes(t.tipo==="Juicio"?"Casos y Juicios":t.tipo||"Casos y Juicios"))].map(t=>renderTarea(t))
-                ):<>
-                  {seccion("URGENTES",urgentesArriba,urgentesCompletadas,"#E24B4A")}
-                  {seccion("ATRASADAS",atrasadas,atrasadasCompletadas,"#9B59B6")}
-                  {seccion("HOY",vencenHoy,vencenHoyCompletadas,"#378ADD")}
-                  {seccion("PRÓXIMAS TAREAS",proximas,proximasCompletadas,"#555")}
-                  {vistaActual.filter(t=>!t.done).length===0&&recienCompletadas.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>}
-                </>}
+                {(()=>{
+                  const filtrar = (arr:Tarea[]) => filtroTipos.length===0 ? arr : arr.filter(t=>{
+                    const label = t.tipo==="Juicio"?"Casos y Juicios":t.tipo==="Personales"?"Asuntos Personales":t.tipo||"Casos y Juicios"
+                    return filtroTipos.includes(label)
+                  })
+                  const uA=filtrar(urgentesArriba),uC=filtrar(urgentesCompletadas)
+                  const aA=filtrar(atrasadas),aC=filtrar(atrasadasCompletadas)
+                  const hA=filtrar(vencenHoy),hC=filtrar(vencenHoyCompletadas)
+                  const pA=filtrar(proximas),pC=filtrar(proximasCompletadas)
+                  if(!uA.length&&!uC.length&&!aA.length&&!aC.length&&!hA.length&&!hC.length&&!pA.length&&!pC.length)
+                    return <div style={{color:"#aaa",fontSize:14}}>No hay tareas activas.</div>
+                  return <>{seccion("URGENTES",uA,uC,"#E24B4A")}{seccion("ATRASADAS",aA,aC,"#9B59B6")}{seccion("HOY",hA,hC,"#378ADD")}{seccion("PRÓXIMAS TAREAS",pA,pC,"#555")}</>
+                })()}
               </div>
             )}
 
