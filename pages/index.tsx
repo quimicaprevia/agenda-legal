@@ -193,13 +193,14 @@ export default function Home() {
   // recienCompletadas ya no se necesita como lista separada — seccion las renderiza con vistaActual
   const recienCompletadas = vistaActual.filter(t=>t.done&&cambios[t.id]?.done===true)
 
-  const urgentesArriba = vistaParaSecciones.filter(t=>t.urgente)
+  const urgentesArriba = vistaParaSecciones.filter(t=>t.urgente&&(!t.fecha||esAtrasada(t)||esHoy_(t)))
   const urgentesCompletadas: Tarea[] = []
   const atrasadas      = vistaParaSecciones.filter(t=>!t.urgente&&esAtrasada(t))
   const atrasadasCompletadas: Tarea[] = []
   const vencenHoy      = vistaParaSecciones.filter(t=>!t.urgente&&esHoy_(t))
   const vencenHoyCompletadas: Tarea[] = []
-  const proximas       = vistaParaSecciones.filter(t=>!t.urgente&&esProxima(t))
+  // Próximas: no urgentes con fecha futura + urgentes con fecha futura
+  const proximas       = vistaParaSecciones.filter(t=>esProxima(t)&&!urgentesArriba.find(u=>u.id===t.id))
   const proximasCompletadas: Tarea[] = []
   const hayPendientes  = Object.keys(cambios).length > 0
 
