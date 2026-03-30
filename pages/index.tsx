@@ -230,7 +230,7 @@ export default function Home() {
   // ─── ACCIONES TAREAS (sin "Actualizar vista" — van directo a API y cambios) ──
   // NOTA: toggleDone, posponer y toggleUrgente guardan en cambios[] PERO también
   // persisten en la API inmediatamente. La vista no se reordena hasta "Actualizar".
-  const toggleDone = (t:Tarea) => {
+  const toggleDone = (t:Tarea, inmediato=false) => {
     const doneActual = cambios[t.id]?.done ?? t.done
     if (!doneActual && t.juicioId) {
       const j = juicios.find(j=>j.id===t.juicioId)
@@ -240,16 +240,27 @@ export default function Home() {
       }
     }
     const nuevoDone = !doneActual
-    // Persiste en API
     fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,done:nuevoDone})})
-    // Solo registra en cambios — NO reordena vistaCongelada
-    setCambios(p=>({...p,[t.id]:{...p[t.id],done:nuevoDone}}))
+    if (inmediato) {
+      // Aplica directo al estado — no pasa por cambios ni vistaCongelada
+      setTareas(ts=>ts.map(x=>x.id===t.id?{...x,done:nuevoDone}:x))
+      setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,done:nuevoDone}:x)})))
+      setAsuntos(as=>as.map(a=>({...a,tareas:a.tareas.map(x=>x.id===t.id?{...x,done:nuevoDone}:x)})))
+    } else {
+      setCambios(p=>({...p,[t.id]:{...p[t.id],done:nuevoDone}}))
+    }
   }
 
-  const toggleUrgente = (t:Tarea) => {
+  const toggleUrgente = (t:Tarea, inmediato=false) => {
     const nuevoUrgente = !(cambios[t.id]?.urgente ?? t.urgente)
     fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,urgente:nuevoUrgente})})
-    setCambios(p=>({...p,[t.id]:{...p[t.id],urgente:nuevoUrgente}}))
+    if (inmediato) {
+      setTareas(ts=>ts.map(x=>x.id===t.id?{...x,urgente:nuevoUrgente}:x))
+      setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,urgente:nuevoUrgente}:x)})))
+      setAsuntos(as=>as.map(a=>({...a,tareas:a.tareas.map(x=>x.id===t.id?{...x,urgente:nuevoUrgente}:x)})))
+    } else {
+      setCambios(p=>({...p,[t.id]:{...p[t.id],urgente:nuevoUrgente}}))
+    }
   }
 
   const posponer = (t:Tarea) => {
@@ -760,12 +771,11 @@ export default function Home() {
                     <div style={{width:4,flexShrink:0,background:FRANJA["Casos y Juicios"],borderRadius:"12px 0 0 12px"}}/>
                     <div style={{flex:1}}>
                     <div style={S.cardHeader}>
-                      <div style={{...S.check,...(t.done?S.checkDone:{})}} onClick={()=>toggleDone(t)}>{t.done?"✓":""}</div>
+                      <div style={{...S.check,...(t.done?S.checkDone:{})}} onClick={()=>toggleDone(t,true)}>{t.done?"✓":""}</div>
                       <div style={{flex:1,marginLeft:8,fontSize:13}}>{t.texto}</div>
                       {t.urgente&&<span style={{fontSize:10,color:"#A32D2D",fontWeight:600,background:"#FCEBEB",padding:"1px 6px",borderRadius:8}}>URG</span>}
                       {t.fecha&&<span style={{fontSize:11,color:"#888",whiteSpace:"nowrap"}}>{formatFecha(t.fecha)}</span>}
-                      <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}} onClick={()=>toggleUrgente(t)}>!</button>
-                      <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente)}}>✎</button>
+                      <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}} onClick={()=>toggleUrgente(t,true)}>!</button>
                     </div>
                     {editId===t.id&&(
                       <div style={{padding:"0 14px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -811,7 +821,7 @@ export default function Home() {
                     {mostrarConc[j.id]&&concluidas.map(t=>(
                       <div key={t.id} style={{...S.card,opacity:0.6,marginBottom:4}}>
                         <div style={S.cardHeader}>
-                          <div style={{...S.check,...S.checkDone}} onClick={()=>toggleDone(t)}>✓</div>
+                          <div style={{...S.check,...S.checkDone}} onClick={()=>toggleDone(t,true)}>✓</div>
                           <div style={{flex:1,marginLeft:8,fontSize:13,textDecoration:"line-through",color:"#aaa"}}>{t.texto}</div>
                         </div>
                       </div>
@@ -985,11 +995,11 @@ export default function Home() {
                 <div style={{width:4,flexShrink:0,background:FRANJA[tipoLabel]||"#888",borderRadius:"12px 0 0 12px"}}/>
                 <div style={{flex:1}}>
                 <div style={S.cardHeader}>
-                  <div style={{...S.check,...(t.done?S.checkDone:{})}} onClick={()=>toggleDone(t)}>{t.done?"✓":""}</div>
+                  <div style={{...S.check,...(t.done?S.checkDone:{})}} onClick={()=>toggleDone(t,true)}>{t.done?"✓":""}</div>
                   <div style={{flex:1,marginLeft:8,fontSize:13}}>{t.texto}</div>
                   {t.urgente&&<span style={{fontSize:10,color:"#A32D2D",fontWeight:600,background:"#FCEBEB",padding:"1px 6px",borderRadius:8}}>URG</span>}
                   {t.fecha&&<span style={{fontSize:11,color:"#888",whiteSpace:"nowrap"}}>{formatFecha(t.fecha)}</span>}
-                  <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}} onClick={()=>toggleUrgente(t)}>!</button>
+                  <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}} onClick={()=>toggleUrgente(t,true)}>!</button>
                   <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente)}}>✎</button>
                 </div>
                 {editId===t.id&&(
@@ -1020,18 +1030,7 @@ export default function Home() {
                 {mostrarConc[a.id]&&concluidas.map(t=>(
                   <div key={t.id} style={{...S.card,opacity:0.6,marginBottom:4}}>
                     <div style={S.cardHeader}>
-                      <div style={{...S.check,...S.checkDone}} onClick={()=>toggleDone(t)}>✓</div>
-                      <div style={{flex:1,marginLeft:8,fontSize:13,textDecoration:"line-through",color:"#aaa"}}>{t.texto}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
+                      <div style={{...S.check,...S.checkDone}} onClick={()=>toggleDone(t,true)}>✓</div>
 
   // ─── STATS JUICIOS ────────────────────────────────────────────────────────────
   const statsPorEstado = TODOS_ESTADOS_JUICIO.map(e=>({
