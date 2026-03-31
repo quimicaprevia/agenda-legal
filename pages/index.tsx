@@ -286,9 +286,9 @@ export default function Home() {
     (j.honorarios||[]).filter(h=>h.estado!=="Pago total").map(h=>({...h,autos:j.autos}))
   )
 
-  // Todos los clientes cargados en cualquier juicio (deduplicados por id)
+  // Todos los clientes cargados en cualquier juicio (deduplicados por apellido+nombre)
   const todosClientesRaw: ClienteJuicio[] = juicios.flatMap(j=>j.clientes||[])
-  const todosClientes: ClienteJuicio[] = Array.from(new Map(todosClientesRaw.map(c=>[c.id,c])).values())
+  const todosClientes: ClienteJuicio[] = Array.from(new Map(todosClientesRaw.map(c=>[(c.apellido+c.nombre).toLowerCase().trim(),c])).values())
 
   // ─── ACCIONES TAREAS (sin "Actualizar vista" — van directo a API y cambios) ──
   // NOTA: toggleDone, posponer y toggleUrgente guardan en cambios[] PERO también
