@@ -803,12 +803,12 @@ export default function Home() {
                 <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
                   <button style={S.btnPosponer} onClick={()=>{const open=posponerOpen===t.id?null:t.id;setPosponerOpen(open);setPosponerFecha("");if(open){const h=new Date();setPosponerMes({y:h.getFullYear(),m:h.getMonth()})}}}>↷ Posponer</button>
                   {posponerOpen===t.id&&(
-                    <div style={{position:"absolute",top:30,right:0,zIndex:200}}>
+                    <div className="calendario-posponer" style={{position:"absolute",top:30,right:0,zIndex:200,background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:10,padding:10,boxShadow:"0 4px 16px rgba(0,0,0,0.14)"}}>
                       {renderCalendario(
                         t.id, posponerFecha, setPosponerFecha,
                         posponerMes, setPosponerMes,
                         undefined,
-                        {}
+                        {border:"none",boxShadow:"none",padding:0,borderRadius:0}
                       )}
                       <div style={{display:"flex",gap:6,justifyContent:"flex-end",marginTop:4}}>
                         <button style={S.btn} onClick={()=>setPosponerOpen(null)}>Cancelar</button>
