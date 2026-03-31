@@ -165,6 +165,22 @@ export default function Home() {
   const [asuntoCalOpen, setAsuntoCalOpen] = useState<string|null>(null)
   const [asuntoCalMes, setAsuntoCalMes] = useState<{y:number;m:number}|null>(null)
 
+  // Calendario edición de tarea (panel tareas)
+  const [editCalOpen, setEditCalOpen] = useState(false)
+  const [editCalMes, setEditCalMes] = useState<{y:number;m:number}|null>(null)
+
+  // Calendario nueva tarea en juicio — por juicioId
+  const [juicioNtCalOpen, setJuicioNtCalOpen] = useState<string|null>(null)
+  const [juicioNtCalMes, setJuicioNtCalMes] = useState<{y:number;m:number}|null>(null)
+
+  // Calendario edición tarea en juicio/asunto
+  const [editJuicioCalOpen, setEditJuicioCalOpen] = useState(false)
+  const [editJuicioCalMes, setEditJuicioCalMes] = useState<{y:number;m:number}|null>(null)
+
+  // Calendario nueva tarea personal
+  const [personalCalOpen, setPersonalCalOpen] = useState(false)
+  const [personalCalMes, setPersonalCalMes] = useState<{y:number;m:number}|null>(null)
+
   // Posponer
   const [posponerOpen, setPosponerOpen] = useState<string|null>(null)
   const [posponerFecha, setPosponerFecha] = useState("")
@@ -726,19 +742,23 @@ export default function Home() {
               <span className="caratula"
                 style={{fontSize:14,fontWeight:600,color:isDone?"#aaa":franja,cursor:"pointer",lineHeight:1.4,textDecoration:isDone?"line-through":"none"}}
                 onClick={e=>{e.stopPropagation();if(t.juicioId){setPanel("juicios");setExpandido(t.juicioId);setTabActiva(p=>({...p,[t.juicioId!]:"tareas"}))}else if(t.asuntoId){const a=asuntos.find(x=>x.id===t.asuntoId);if(a){setPanel(a.tipo==="probono"?"probono":a.tipo==="consultoria"?"consultoria":"docencia");setExpandidoSet(s=>{const n=new Set(s);n.add(t.asuntoId!);return n})}}}}
-              >{t.tipo==="Personales"&&!t.juicioId&&!t.asuntoId ? texto : (t.juicio?.autos||t.asunto?.nombre||t.tema||tipoLabel)}</span>
+              >{(t.tipo==="Personales"||t.tipo==="personales")&&!t.juicioId&&!t.asuntoId ? texto : (t.juicio?.autos||t.asunto?.nombre||t.tema||tipoLabel)}</span>
               {isEdit?(
                 <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:6}}>
                   <input style={{...S.input,fontSize:13}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
                   <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                    <input type="date" style={{...S.input,width:150}} value={editFecha} onChange={e=>setEditFecha(e.target.value)}/>
+                    <div style={{position:"relative"}}>
+                      <input readOnly style={{...S.input,width:150,cursor:"pointer",background:"#f9f9f8"}} placeholder="Fecha..." value={editFecha?formatFecha(editFecha+""): ""} onClick={()=>{setEditCalOpen(v=>!v);if(!editCalMes){const h=new Date();setEditCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>
+                      {editFecha&&<button style={{...S.btnMini,position:"absolute",right:4,top:"50%",transform:"translateY(-50%)"}} onClick={()=>{setEditFecha("");setEditCalOpen(false)}}>✕</button>}
+                      {editCalOpen&&<div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:300}}>{renderCalendario("edit",editFecha,(f)=>{setEditFecha(f);setEditCalOpen(false)},editCalMes,setEditCalMes)}</div>}
+                    </div>
                     <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
                       <input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente
                     </label>
                     <button style={S.btnPrimary} onClick={e=>{e.stopPropagation();guardarEdicion(t)}}>Guardar</button>
                     <button style={S.btn} onClick={e=>{e.stopPropagation();setEditId(null)}}>✕</button>
                   </div>
-                  {t.tipo==="Personales"&&(
+                  {(t.tipo==="Personales"||t.tipo==="personales")&&(
                     <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
                       <input style={{...S.input,flex:"2 1 180px"}} placeholder="Información adicional..." value={editInfo} onChange={e=>setEditInfo(e.target.value)}/>
                       <input style={{...S.input,flex:"2 1 180px"}} placeholder="Link web (https://...)" value={editWebUrl} onChange={e=>setEditWebUrl(e.target.value)}/>
@@ -751,10 +771,10 @@ export default function Home() {
                 </div>
               ):(
                 <>
-                  {!(t.tipo==="Personales"&&!t.juicioId&&!t.asuntoId)&&(
+                  {!((t.tipo==="Personales"||t.tipo==="personales")&&!t.juicioId&&!t.asuntoId)&&(
                     <div style={{fontSize:14,color:isDone?"#aaa":"#222",textDecoration:isDone?"line-through":"none",marginTop:4,lineHeight:1.35}}>{texto}</div>
                   )}
-                  {t.tipo==="Personales"&&!t.juicioId&&!t.asuntoId&&t.info&&(
+                  {(t.tipo==="Personales"||t.tipo==="personales")&&!t.juicioId&&!t.asuntoId&&t.info&&(
                     <div style={{fontSize:12,color:"#888",marginTop:3,lineHeight:1.4}}>{t.info}</div>
                   )}
                 </>
@@ -799,7 +819,7 @@ export default function Home() {
                 </div>
               )}
               {!isDone&&<button style={{...S.btnUrgente,...(urgente?{background:"#E24B4A",color:"#fff"}:{})}} onClick={e=>{e.stopPropagation();toggleUrgente(t)}}>! urgente</button>}
-              {!isDone&&t.tipo==="Personales"&&<button style={{...S.btnMini,color:"#E24B4A"}} onClick={e=>{e.stopPropagation();eliminarTareaPersonal(t.id)}}>✕</button>}
+              {!isDone&&(t.tipo==="Personales"||t.tipo==="personales")&&<button style={{...S.btnMini,color:"#E24B4A"}} onClick={e=>{e.stopPropagation();eliminarTareaPersonal(t.id)}}>✕</button>}
             </div>
           )}
         </div>
@@ -1023,7 +1043,7 @@ export default function Home() {
                     {editId===t.id&&(
                       <div style={{padding:"0 14px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
                         <input style={{...S.input,flex:"3 1 180px"}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
-                        <input type="date" style={{...S.input,flex:"1 1 130px"}} value={editFecha} onChange={e=>setEditFecha(e.target.value)}/>
+                        <div style={{position:"relative",flex:"1 1 130px"}}><input readOnly style={{...S.input,width:"100%",cursor:"pointer",background:"#f9f9f8"}} placeholder="Fecha..." value={editFecha?formatFecha(editFecha):""} onClick={()=>{setEditJuicioCalOpen(v=>!v);if(!editJuicioCalMes){const h=new Date();setEditJuicioCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>{editJuicioCalOpen&&<div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:300}}>{renderCalendario("editj",editFecha,(f)=>{setEditFecha(f);setEditJuicioCalOpen(false)},editJuicioCalMes,setEditJuicioCalMes)}</div>}</div>
                         <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente</label>
                         <button style={S.btnPrimary} onClick={()=>guardarEdicion(t,true)}>Guardar</button>
                         <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
@@ -1035,7 +1055,10 @@ export default function Home() {
                 {activas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin tareas activas</div>}
                 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
                   <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva tarea..." value={nt.texto} onChange={e=>setNtMap(p=>({...p,[j.id]:{...nt,texto:e.target.value}}))} onKeyDown={e=>e.key==="Enter"&&agregarTareaJuicio(j.id)}/>
-                  <input type="date" style={{...S.input,flex:"1 1 140px"}} value={nt.fecha} onChange={e=>setNtMap(p=>({...p,[j.id]:{...nt,fecha:e.target.value}}))}/>
+                  <div style={{position:"relative",flex:"1 1 140px"}}>
+                    <input readOnly style={{...S.input,width:"100%",cursor:"pointer",background:"#f9f9f8",boxSizing:"border-box" as const}} placeholder="Fecha..." value={nt.fecha?formatFecha(nt.fecha):""} onClick={()=>{setJuicioNtCalOpen(juicioNtCalOpen===j.id?null:j.id);if(!juicioNtCalMes){const h=new Date();setJuicioNtCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>
+                    {juicioNtCalOpen===j.id&&<div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:300}}>{renderCalendario(j.id,nt.fecha,(f)=>{setNtMap(p=>({...p,[j.id]:{...nt,fecha:f}}));setJuicioNtCalOpen(null)},juicioNtCalMes,setJuicioNtCalMes)}</div>}
+                  </div>
                   <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={nt.urgente} onChange={e=>setNtMap(p=>({...p,[j.id]:{...nt,urgente:e.target.checked}}))}/> Urgente</label>
                   <button style={S.btnPrimary} onClick={()=>agregarTareaJuicio(j.id)}>+ Agregar</button>
                 </div>
@@ -1274,7 +1297,7 @@ export default function Home() {
                 {editId===t.id&&(
                   <div style={{padding:"0 14px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
                     <input style={{...S.input,flex:"3 1 180px"}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
-                    <input type="date" style={{...S.input,flex:"1 1 130px"}} value={editFecha} onChange={e=>setEditFecha(e.target.value)}/>
+                    <div style={{position:"relative",flex:"1 1 130px"}}><input readOnly style={{...S.input,width:"100%",cursor:"pointer",background:"#f9f9f8"}} placeholder="Fecha..." value={editFecha?formatFecha(editFecha):""} onClick={()=>{setEditJuicioCalOpen(v=>!v);if(!editJuicioCalMes){const h=new Date();setEditJuicioCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>{editJuicioCalOpen&&<div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:300}}>{renderCalendario("editj",editFecha,(f)=>{setEditFecha(f);setEditJuicioCalOpen(false)},editJuicioCalMes,setEditJuicioCalMes)}</div>}</div>
                     <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente</label>
                     <button style={S.btnPrimary} onClick={()=>guardarEdicion(t,true)}>Guardar</button>
                     <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
@@ -1600,7 +1623,10 @@ export default function Home() {
               <div>
                 <div style={{marginBottom:14,display:"flex",gap:6,flexWrap:"wrap"}}>
                   <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva actividad personal..." value={ntPersonal.texto} onChange={e=>setNtPersonal(p=>({...p,texto:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&agregarTareaPersonal()}/>
-                  <input type="date" style={{...S.input,flex:"1 1 140px"}} value={ntPersonal.fecha} onChange={e=>setNtPersonal(p=>({...p,fecha:e.target.value}))}/>
+                  <div style={{position:"relative",flex:"1 1 140px"}}>
+                    <input readOnly style={{...S.input,width:"100%",cursor:"pointer",background:"#f9f9f8",boxSizing:"border-box" as const}} placeholder="Fecha..." value={ntPersonal.fecha?formatFecha(ntPersonal.fecha):""} onClick={()=>{setPersonalCalOpen(v=>!v);if(!personalCalMes){const h=new Date();setPersonalCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>
+                    {personalCalOpen&&<div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:300}}>{renderCalendario("personal",ntPersonal.fecha,(f)=>{setNtPersonal(p=>({...p,fecha:f}));setPersonalCalOpen(false)},personalCalMes,setPersonalCalMes)}</div>}
+                  </div>
                   <input style={{...S.input,flex:"3 1 200px"}} placeholder="Información adicional..." value={ntPersonal.info} onChange={e=>setNtPersonal(p=>({...p,info:e.target.value}))}/>
                   <input style={{...S.input,flex:"2 1 160px"}} placeholder="Link web (https://...)" value={ntPersonal.webUrl} onChange={e=>setNtPersonal(p=>({...p,webUrl:e.target.value}))}/>
                   <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={ntPersonal.urgente} onChange={e=>setNtPersonal(p=>({...p,urgente:e.target.checked}))}/> Urgente</label>
