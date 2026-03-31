@@ -65,6 +65,7 @@ model Tarea {
   tema      String?
   info      String?
   webUrl    String?
+  historial String?
   createdAt DateTime  @default(now())
 }
 
