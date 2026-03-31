@@ -21,6 +21,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.json(c)
   }
 
+  if (req.method === "PUT") {
+    const { id, apellido, nombre, dni, correo, telefono, domicilio } = req.body
+    const c = await prisma.clienteJuicio.update({ where: { id }, data: { apellido, nombre, dni, correo, telefono, domicilio } })
+    return res.json(c)
+  }
+
   if (req.method === "DELETE") {
     await prisma.clienteJuicio.delete({ where: { id: req.body.id } })
     return res.json({ ok: true })

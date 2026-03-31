@@ -163,6 +163,10 @@ export default function Home() {
   const [editHonId, setEditHonId] = useState<string|null>(null)
   const [editHon, setEditHon] = useState({clienteContraparte:"",total:"",pagado:"",estado:"Pendiente",observaciones:""})
 
+  // Edición inline de clientes
+  const [editClienteId, setEditClienteId] = useState<string|null>(null)
+  const [editCliente, setEditCliente] = useState({apellido:"",nombre:"",dni:"",correo:"",telefono:"",domicilio:""})
+
   // Nueva tarea personal
   const [ntPersonal, setNtPersonal] = useState({texto:"",fecha:"",urgente:false,info:"",webUrl:""})
   // Nueva tarea desde panel derecho
@@ -282,8 +286,9 @@ export default function Home() {
     (j.honorarios||[]).filter(h=>h.estado!=="Pago total").map(h=>({...h,autos:j.autos}))
   )
 
-  // Todos los clientes cargados en cualquier juicio (para autocompletar)
-  const todosClientes: ClienteJuicio[] = juicios.flatMap(j=>j.clientes||[])
+  // Todos los clientes cargados en cualquier juicio (deduplicados por id)
+  const todosClientesRaw: ClienteJuicio[] = juicios.flatMap(j=>j.clientes||[])
+  const todosClientes: ClienteJuicio[] = Array.from(new Map(todosClientesRaw.map(c=>[c.id,c])).values())
 
   // ─── ACCIONES TAREAS (sin "Actualizar vista" — van directo a API y cambios) ──
   // NOTA: toggleDone, posponer y toggleUrgente guardan en cambios[] PERO también
@@ -543,6 +548,12 @@ export default function Home() {
   const borrarCliente = async (juicioId:string, clienteId:string) => {
     await fetch("/api/clientes",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:clienteId})})
     setJuicios(js=>js.map(j=>j.id===juicioId?{...j,clientes:(j.clientes||[]).filter(c=>c.id!==clienteId)}:j))
+  }
+
+  const guardarCliente = async (clienteId:string) => {
+    await fetch("/api/clientes",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:clienteId,...editCliente})})
+    setJuicios(js=>js.map(j=>({...j,clientes:(j.clientes||[]).map(c=>c.id===clienteId?{...c,...editCliente}:c)})))
+    setEditClienteId(null)
   }
 
   const buscarClientes = (juicioId:string, q:string) => {
@@ -1512,20 +1523,45 @@ export default function Home() {
               <div>
                 {todosClientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay clientes cargados.</div>:(
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
-                    {[...todosClientes].sort((a,b)=>a.apellido.localeCompare(b.apellido,"es")).map((c,i)=>(
-                      <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,background:"#fff"}}>
-                        <div style={{width:5,flexShrink:0,background:"#8B5E3C",borderRadius:"12px 0 0 12px"}}/>
-                        <div style={{flex:1,padding:"12px 14px"}}>
-                          <div style={{fontSize:14,fontWeight:500,color:"#6B4226",marginBottom:6}}>{c.apellido}, {c.nombre}</div>
-                          <div style={{display:"flex",flexDirection:"column" as const,gap:3}}>
-                            {c.dni&&<span style={{fontSize:12,color:"#555"}}>DNI: {c.dni}</span>}
-                            {c.correo&&<span style={{fontSize:12,color:"#555"}}>✉ {c.correo}</span>}
-                            {c.telefono&&<span style={{fontSize:12,color:"#555"}}>📞 {c.telefono}</span>}
-                            {c.domicilio&&<span style={{fontSize:12,color:"#555"}}>📍 {c.domicilio}</span>}
+                    {[...todosClientes].sort((a,b)=>a.apellido.localeCompare(b.apellido,"es")).map((c)=>{
+                      const isEditC = editClienteId===c.id
+                      return (
+                        <div key={c.id} style={{display:"flex",overflow:"hidden",border:`0.5px solid ${isEditC?"#8B5E3C":"#e5e7eb"}`,borderRadius:12,background:"#fff"}}>
+                          <div style={{width:5,flexShrink:0,background:"#8B5E3C",borderRadius:"12px 0 0 12px"}}/>
+                          <div style={{flex:1,padding:"12px 14px"}}>
+                            {isEditC?(
+                              <div style={{display:"flex",flexDirection:"column" as const,gap:6}}>
+                                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                                  <input style={S.input} placeholder="Apellido *" value={editCliente.apellido} onChange={e=>setEditCliente(p=>({...p,apellido:e.target.value}))} autoFocus/>
+                                  <input style={S.input} placeholder="Nombre" value={editCliente.nombre} onChange={e=>setEditCliente(p=>({...p,nombre:e.target.value}))}/>
+                                  <input style={S.input} placeholder="DNI" value={editCliente.dni} onChange={e=>setEditCliente(p=>({...p,dni:e.target.value}))}/>
+                                  <input style={S.input} placeholder="Correo" value={editCliente.correo} onChange={e=>setEditCliente(p=>({...p,correo:e.target.value}))}/>
+                                  <input style={S.input} placeholder="Teléfono" value={editCliente.telefono} onChange={e=>setEditCliente(p=>({...p,telefono:e.target.value}))}/>
+                                  <input style={S.input} placeholder="Domicilio" value={editCliente.domicilio} onChange={e=>setEditCliente(p=>({...p,domicilio:e.target.value}))}/>
+                                </div>
+                                <div style={{display:"flex",gap:6}}>
+                                  <button style={S.btnPrimary} onClick={()=>guardarCliente(c.id)}>Guardar</button>
+                                  <button style={S.btn} onClick={()=>setEditClienteId(null)}>Cancelar</button>
+                                </div>
+                              </div>
+                            ):(
+                              <>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                                  <div style={{fontSize:14,fontWeight:500,color:"#6B4226"}}>{c.apellido}, {c.nombre}</div>
+                                  <button style={S.btnMini} onClick={()=>{setEditClienteId(c.id);setEditCliente({apellido:c.apellido,nombre:c.nombre,dni:c.dni||"",correo:c.correo||"",telefono:c.telefono||"",domicilio:c.domicilio||""})}}>✎</button>
+                                </div>
+                                <div style={{display:"flex",flexDirection:"column" as const,gap:3}}>
+                                  {c.dni&&<span style={{fontSize:12,color:"#555"}}>DNI: {c.dni}</span>}
+                                  {c.correo&&<span style={{fontSize:12,color:"#555"}}>✉ {c.correo}</span>}
+                                  {c.telefono&&<span style={{fontSize:12,color:"#555"}}>📞 {c.telefono}</span>}
+                                  {c.domicilio&&<span style={{fontSize:12,color:"#555"}}>📍 {c.domicilio}</span>}
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
