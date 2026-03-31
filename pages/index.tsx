@@ -159,10 +159,17 @@ export default function Home() {
   const [clienteBusqueda, setClienteBusqueda]   = useState<Record<string,string>>({})
   const [clienteSugerencias, setClienteSugerencias] = useState<Record<string,ClienteJuicio[]>>({})
 
+  // Edición inline de honorarios
+  const [editHonId, setEditHonId] = useState<string|null>(null)
+  const [editHon, setEditHon] = useState({clienteContraparte:"",total:"",pagado:"",estado:"Pendiente",observaciones:""})
+
   // Nueva tarea personal
   const [ntPersonal, setNtPersonal] = useState({texto:"",fecha:"",urgente:false,info:"",webUrl:""})
   // Nueva tarea desde panel derecho
   const [ntPanel, setNtPanel] = useState({texto:"",fecha:""})
+
+  // Ref para scroll del panel de tareas
+  const tareasScrollRef = useRef<HTMLDivElement>(null)
 
   // Cerrar calendario al clickear afuera
   useEffect(() => {
@@ -506,6 +513,18 @@ export default function Home() {
     const h = await res.json()
     setJuicios(js=>js.map(j=>j.id===juicioId?{...j,honorarios:[...(j.honorarios||[]),h]}:j))
     setNhMap(p=>({...p,[juicioId]:{clienteContraparte:"",total:"",pagado:"",estado:"Pendiente",observaciones:""}}))
+  }
+
+  const eliminarHonorario = async (juicioId:string, honorarioId:string) => {
+    if(!confirm("¿Eliminar este honorario?")) return
+    await fetch("/api/honorarios",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:honorarioId})})
+    setJuicios(js=>js.map(j=>j.id===juicioId?{...j,honorarios:(j.honorarios||[]).filter(h=>h.id!==honorarioId)}:j))
+  }
+
+  const guardarHonorario = async (juicioId:string, honorarioId:string) => {
+    await fetch("/api/honorarios",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:honorarioId,...editHon})})
+    setJuicios(js=>js.map(j=>j.id===juicioId?{...j,honorarios:(j.honorarios||[]).map(h=>h.id===honorarioId?{...h,...editHon}:h)}:j))
+    setEditHonId(null)
   }
 
   // ─── CLIENTES ────────────────────────────────────────────────────────────────
@@ -861,6 +880,7 @@ export default function Home() {
                       {t.urgente&&<span style={{fontSize:10,color:"#A32D2D",fontWeight:600,background:"#FCEBEB",padding:"1px 6px",borderRadius:8}}>URG</span>}
                       {t.fecha&&<span style={{fontSize:11,color:"#888",whiteSpace:"nowrap"}}>{formatFecha(t.fecha)}</span>}
                       <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}} onClick={()=>toggleUrgente(t,true)}>!</button>
+                      <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente)}}>✎</button>
                     </div>
                     {editId===t.id&&(
                       <div style={{padding:"0 14px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -970,27 +990,45 @@ export default function Home() {
                 {(j.honorarios||[]).map(h=>{
                   const hc = h.estado==="Pago total"?"#3B6D11":h.estado==="Pago Parcial"?"#185FA5":"#633806"
                   const hb = h.estado==="Pago total"?"#EAF3DE":h.estado==="Pago Parcial"?"#E6F1FB":"#FAEEDA"
+                  const isEditH = editHonId===h.id
                   return (
                     <div key={h.id} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:10,marginBottom:6,background:"#fff"}}>
                       <div style={{width:4,flexShrink:0,background:hc,borderRadius:"10px 0 0 10px"}}/>
                       <div style={{flex:1,padding:"10px 12px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                          <div style={{fontWeight:500,fontSize:13,color:"#111"}}>{h.clienteContraparte}</div>
-                          <span style={{...S.badge,background:hb,color:hc,fontSize:11,flexShrink:0}}>{h.estado}</span>
-                        </div>
-                        <div style={{fontSize:12,color:"#555",marginTop:4}}>{h.total&&`Total: ${h.total}`}{h.pagado?` · Pagado: ${h.pagado}`:""}</div>
-                        {h.observaciones&&<div style={{fontSize:11,color:"#888",marginTop:3}}>{h.observaciones}</div>}
+                        {isEditH?(
+                          <div style={{display:"flex",flexDirection:"column" as const,gap:6}}>
+                            <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                              <input style={{...S.input,flex:"2 1 160px"}} placeholder="Cliente / Contraparte" value={editHon.clienteContraparte} onChange={e=>setEditHon(p=>({...p,clienteContraparte:e.target.value}))}/>
+                              <input style={{...S.input,flex:"1 1 90px"}} placeholder="Total" value={editHon.total} onChange={e=>setEditHon(p=>({...p,total:e.target.value}))}/>
+                              <input style={{...S.input,flex:"1 1 90px"}} placeholder="Pagado" value={editHon.pagado} onChange={e=>setEditHon(p=>({...p,pagado:e.target.value}))}/>
+                              <select style={{...S.input,flex:"1 1 110px"}} value={editHon.estado} onChange={e=>setEditHon(p=>({...p,estado:e.target.value}))}>{ESTADOS_HON.map(e=><option key={e}>{e}</option>)}</select>
+                            </div>
+                            <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                              <input style={{...S.input,flex:1}} placeholder="Observaciones" value={editHon.observaciones} onChange={e=>setEditHon(p=>({...p,observaciones:e.target.value}))}/>
+                              <button style={S.btnPrimary} onClick={()=>guardarHonorario(j.id,h.id)}>Guardar</button>
+                              <button style={S.btn} onClick={()=>setEditHonId(null)}>✕</button>
+                            </div>
+                          </div>
+                        ):(
+                          <>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                              <div style={{fontWeight:500,fontSize:13,color:"#111"}}>{h.clienteContraparte}</div>
+                              <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
+                                <span style={{...S.badge,background:hb,color:hc,fontSize:11}}>{h.estado}</span>
+                                <button style={S.btnMini} onClick={()=>{setEditHonId(h.id);setEditHon({clienteContraparte:h.clienteContraparte||"",total:h.total||"",pagado:h.pagado||"",estado:h.estado,observaciones:h.observaciones||""})}}>✎</button>
+                                <button style={{...S.btnMini,color:"#E24B4A"}} onClick={()=>eliminarHonorario(j.id,h.id)}>✕</button>
+                              </div>
+                            </div>
+                            <div style={{fontSize:12,color:"#555",marginTop:4}}>{h.total&&`Total: ${h.total}`}{h.pagado?` · Pagado: ${h.pagado}`:""}</div>
+                            {h.observaciones&&<div style={{fontSize:11,color:"#888",marginTop:3}}>{h.observaciones}</div>}
+                          </>
+                        )}
                       </div>
                     </div>
                   )
                 })}
                 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-                  <select style={{...S.input,flex:"2 1 160px"}} value={nh.clienteContraparte} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,clienteContraparte:e.target.value}}))}>
-                    <option value="">Cliente / Contraparte...</option>
-                    {(j.clientes||[]).map(c=><option key={c.id} value={`${c.apellido}, ${c.nombre}`}>{c.apellido}, {c.nombre}</option>)}
-                    <option value="__otro__">Otro (escribir abajo)</option>
-                  </select>
-                  {nh.clienteContraparte==="__otro__"&&<input style={{...S.input,flex:"2 1 160px"}} placeholder="Escribir nombre..." onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,clienteContraparte:e.target.value}}))}/>}
+                  <input style={{...S.input,flex:"2 1 160px"}} placeholder="Cliente / Contraparte..." value={nh.clienteContraparte} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,clienteContraparte:e.target.value}}))}/>
                   <input style={{...S.input,flex:"1 1 100px"}} placeholder="Total" value={nh.total} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,total:e.target.value}}))}/>
                   <input style={{...S.input,flex:"1 1 100px"}} placeholder="Pagado" value={nh.pagado} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,pagado:e.target.value}}))}/>
                   <select style={{...S.input,flex:"1 1 120px"}} value={nh.estado} onChange={e=>setNhMap(p=>({...p,[j.id]:{...nh,estado:e.target.value}}))}>{ESTADOS_HON.map(e=><option key={e}>{e}</option>)}</select>
@@ -1003,7 +1041,7 @@ export default function Home() {
             {/* ── Tab Clientes ── */}
             {tab==="clientes"&&(
               <div>
-                {(j.clientes||[]).length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin clientes cargados</div>}
+                {(j.clientes||[]).length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin clientes asociados. Buscá y asociá desde abajo.</div>}
                 {(j.clientes||[]).map(c=>(
                   <div key={c.id} style={{...S.pruebaRow,alignItems:"flex-start"}}>
                     <div style={{flex:1}}>
@@ -1013,12 +1051,12 @@ export default function Home() {
                       {c.telefono&&<div style={{fontSize:12,color:"#555"}}>📞 {c.telefono}</div>}
                       {c.domicilio&&<div style={{fontSize:12,color:"#555"}}>📍 {c.domicilio}</div>}
                     </div>
-                    <button style={{...S.btnMini,color:"#E24B4A"}} onClick={()=>borrarCliente(j.id,c.id)}>✕</button>
+                    <button style={{...S.btnMini,color:"#E24B4A"}} onClick={async()=>{if(!confirm(`¿Quitar a ${c.apellido}, ${c.nombre} de este juicio?`))return;await borrarCliente(j.id,c.id)}}>✕</button>
                   </div>
                 ))}
-                {/* Búsqueda entre clientes existentes */}
-                <div style={{marginTop:12,marginBottom:8,position:"relative"}}>
-                  <input style={{...S.input,width:"100%"}} placeholder="Buscar cliente existente (apellido o nombre)..." value={busq} onChange={e=>buscarClientes(j.id,e.target.value)}/>
+                <div style={{marginTop:12,fontSize:11,color:"#888",marginBottom:4}}>Asociar cliente existente:</div>
+                <div style={{marginBottom:8,position:"relative"}}>
+                  <input style={{...S.input,width:"100%"}} placeholder="Buscar por apellido o nombre..." value={busq} onChange={e=>buscarClientes(j.id,e.target.value)}/>
                   {sugs.length>0&&(
                     <div style={{position:"absolute",top:32,left:0,right:0,background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:8,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",zIndex:50}}>
                       {sugs.map(c=>(
@@ -1031,15 +1069,23 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-                  <input style={S.input} placeholder="Apellido *" value={nc.apellido} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,apellido:e.target.value}}))}/>
-                  <input style={S.input} placeholder="Nombre" value={nc.nombre} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,nombre:e.target.value}}))}/>
-                  <input style={S.input} placeholder="DNI" value={nc.dni} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,dni:e.target.value}}))}/>
-                  <input style={S.input} placeholder="Correo" value={nc.correo} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,correo:e.target.value}}))}/>
-                  <input style={S.input} placeholder="Teléfono" value={nc.telefono} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,telefono:e.target.value}}))}/>
-                  <input style={S.input} placeholder="Domicilio" value={nc.domicilio} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,domicilio:e.target.value}}))}/>
-                </div>
-                <button style={{...S.btnPrimary,marginTop:8}} onClick={()=>agregarCliente(j.id)}>+ Agregar cliente</button>
+                {nc.apellido&&(
+                  <div style={{display:"flex",flexDirection:"column" as const,gap:6,padding:"10px 12px",background:"#f9f9f8",border:"0.5px solid #e5e7eb",borderRadius:8}}>
+                    <div style={{fontSize:12,color:"#555",fontWeight:500}}>Nuevo cliente para asociar:</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                      <input style={S.input} placeholder="Apellido *" value={nc.apellido} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,apellido:e.target.value}}))}/>
+                      <input style={S.input} placeholder="Nombre" value={nc.nombre} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,nombre:e.target.value}}))}/>
+                      <input style={S.input} placeholder="DNI" value={nc.dni} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,dni:e.target.value}}))}/>
+                      <input style={S.input} placeholder="Correo" value={nc.correo} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,correo:e.target.value}}))}/>
+                      <input style={S.input} placeholder="Teléfono" value={nc.telefono} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,telefono:e.target.value}}))}/>
+                      <input style={S.input} placeholder="Domicilio" value={nc.domicilio} onChange={e=>setNcMap(p=>({...p,[j.id]:{...nc,domicilio:e.target.value}}))}/>
+                    </div>
+                    <button style={{...S.btnPrimary,alignSelf:"flex-start"}} onClick={()=>agregarCliente(j.id)}>+ Asociar cliente</button>
+                  </div>
+                )}
+                {!nc.apellido&&(
+                  <button style={{...S.btn,fontSize:11}} onClick={()=>setNcMap(p=>({...p,[j.id]:{apellido:" ",nombre:"",dni:"",correo:"",telefono:"",domicilio:""}}))}>+ Crear nuevo cliente</button>
+                )}
               </div>
             )}
           </div>
@@ -1221,7 +1267,7 @@ export default function Home() {
         {/* Tareas — destacado en azul */}
         <div
           style={{padding:"8px 14px",cursor:"pointer",fontSize:15,fontWeight:500,color: panel==="tareas"?"#185FA5":"#378ADD",borderLeft: panel==="tareas"?"2px solid #378ADD":"2px solid transparent",background: panel==="tareas"?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}
-          onClick={()=>setPanel("tareas")}
+          onClick={()=>{setPanel("tareas");tareasScrollRef.current&&(tareasScrollRef.current.scrollTop=0)}}
         >
           Tareas
           {tareasActivas.length>0&&<span style={S.navBadge}>{tareasActivas.length}</span>}
@@ -1236,7 +1282,7 @@ export default function Home() {
           {id:"consultoria",  label:"Consultoría",         badge:asuntosConsultoria.length||null},
           {id:"personales",   label:"Asuntos Personales",  badge:tareasPersonales.length||null},
         ].map(item=>(
-          <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>setPanel(item.id)}>
+          <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>{setPanel(item.id);tareasScrollRef.current&&(tareasScrollRef.current.scrollTop=0)}}>
             {item.label}
             {item.badge!=null&&item.badge>0?<span style={S.navBadge}>{item.badge}</span>:null}
           </div>
@@ -1248,7 +1294,7 @@ export default function Home() {
           {id:"honorarios", label:"Honorarios", badge:honorariosPendientes.length||null},
           {id:"clientes",   label:"Clientes",   badge:todosClientes.length||null},
         ].map(item=>(
-          <div key={item.id} style={{padding:"7px 14px",cursor:"pointer",fontSize:13,color:panel===item.id?"#111":"#666",fontWeight:panel===item.id?500:400,borderLeft:panel===item.id?"2px solid #378ADD":"2px solid transparent",background:panel===item.id?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}} onClick={()=>setPanel(item.id)}>
+          <div key={item.id} style={{padding:"7px 14px",cursor:"pointer",fontSize:13,color:panel===item.id?"#111":"#666",fontWeight:panel===item.id?500:400,borderLeft:panel===item.id?"2px solid #378ADD":"2px solid transparent",background:panel===item.id?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}} onClick={()=>{setPanel(item.id);tareasScrollRef.current&&(tareasScrollRef.current.scrollTop=0)}}>
             {item.label}
             {item.badge!=null&&item.badge>0?<span style={S.navBadge}>{item.badge}</span>:null}
           </div>
@@ -1312,7 +1358,7 @@ export default function Home() {
 
         {/* Contenido */}
         <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-          <div style={S.content}>
+          <div style={S.content} ref={tareasScrollRef}>
             {loading&&<div style={{color:"#888",fontSize:14}}>Cargando datos...</div>}
 
             {/* Panel Tareas */}

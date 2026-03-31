@@ -10,7 +10,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!session?.user?.email) return res.status(401).json({ error: "No autorizado" })
 
   if (req.method === "POST") {
-    const honorario = await prisma.honorario.create({ data: req.body })
+    const { juicioId, clienteContraparte, total, pagado, estado, observaciones } = req.body
+    const honorario = await prisma.honorario.create({ data: { juicioId, clienteContraparte, total, pagado, estado, observaciones } })
     return res.json(honorario)
   }
 
