@@ -987,7 +987,7 @@ export default function Home() {
     const sugs     = clienteSugerencias[j.id]||[]
 
     return (
-      <div key={j.id} id={`item-${j.id}`} style={{...S.card,borderColor:exp?"#378ADD":"#e5e7eb"}}>
+      <div key={j.id} id={`item-${j.id}`} style={{...S.card,borderColor:exp?"#378ADD":"#e5e7eb",overflow:"visible"}}>
         <div style={S.cardHeader} onClick={()=>{setExpandido(exp?null:j.id);if(!tabActiva[j.id])setTabActiva(p=>({...p,[j.id]:"tareas"}))}}>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:500,lineHeight:1.35,color:FRANJA["Casos y Juicios"]}}>{j.autos}</div>
@@ -1029,7 +1029,7 @@ export default function Home() {
             {tab==="tareas"&&(
               <div>
                 {activas.map(t=>(
-                  <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":esAtrasada(t)?"#F5F0FF":"#fff",borderColor:t.urgente?"#E24B4A":esAtrasada(t)?"#C9A8F0":"#e5e7eb",marginBottom:6,display:"flex",overflow:"hidden"}}>
+                  <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":esAtrasada(t)?"#F5F0FF":"#fff",borderColor:t.urgente?"#E24B4A":esAtrasada(t)?"#C9A8F0":"#e5e7eb",marginBottom:6,display:"flex",overflow:"visible"}}>
                     <div style={{width:4,flexShrink:0,background:FRANJA["Casos y Juicios"],borderRadius:"12px 0 0 12px"}}/>
                     <div style={{flex:1}}>
                     <div style={S.cardHeader}>
@@ -1264,7 +1264,7 @@ export default function Home() {
     const concluidas = a.tareas.filter(t=>t.done).slice(-5)
     const tipoLabel = a.tipo==="probono"?"Pro Bono":a.tipo==="consultoria"?"Consultoría":"Docencia"
     return (
-      <div key={a.id} id={`item-${a.id}`} style={{...S.card,borderColor:exp?FRANJA[tipoLabel]:"#e5e7eb"}}>
+      <div key={a.id} id={`item-${a.id}`} style={{...S.card,borderColor:exp?FRANJA[tipoLabel]:"#e5e7eb",overflow:"visible"}}>
         <div style={S.cardHeader} onClick={toggleExp}>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:500,lineHeight:1.35,color:FRANJA[tipoLabel]}}>{a.nombre}</div>
@@ -1283,7 +1283,7 @@ export default function Home() {
               {a.webUrl&&<a href={a.webUrl} target="_blank" rel="noopener noreferrer" style={{...S.btnMini,textDecoration:"none",fontSize:11,color:"#185FA5"}}>🌐 Web</a>}
             </div>
             {activas.map(t=>(
-              <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":"#fff",borderColor:t.urgente?"#E24B4A":"#e5e7eb",marginBottom:6,display:"flex",overflow:"hidden"}}>
+              <div key={t.id} style={{...S.card,background:t.urgente?"#FFF0F0":"#fff",borderColor:t.urgente?"#E24B4A":"#e5e7eb",marginBottom:6,display:"flex",overflow:"visible"}}>
                 <div style={{width:4,flexShrink:0,background:FRANJA[tipoLabel]||"#888",borderRadius:"12px 0 0 12px"}}/>
                 <div style={{flex:1}}>
                 <div style={S.cardHeader}>
@@ -1307,18 +1307,20 @@ export default function Home() {
               </div>
             ))}
             {activas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin tareas activas</div>}
-            <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-              <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva tarea..." value={nt.texto} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,texto:e.target.value}}))} onKeyDown={e=>e.key==="Enter"&&agregarTareaAsunto(a.id,tipoLabel)}/>
-              <div style={{position:"relative",flex:"1 1 140px"}}>
-                <input readOnly style={{...S.input,width:"100%",cursor:"pointer",background:"#f9f9f8",boxSizing:"border-box" as const}} placeholder="Fecha..." value={nt.fecha?formatFecha(nt.fecha):""} onClick={()=>{setAsuntoCalOpen(asuntoCalOpen===a.id?null:a.id);if(!asuntoCalMes){const h=new Date();setAsuntoCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>
-                {asuntoCalOpen===a.id&&(
-                  <div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:200}}>
-                    {renderCalendario(a.id,nt.fecha,(f)=>{setNtaMap(p=>({...p,[a.id]:{...nt,fecha:f}}));setAsuntoCalOpen(null)},asuntoCalMes,setAsuntoCalMes)}
-                  </div>
-                )}
+            <div style={{display:"flex",flexDirection:"column" as const,gap:6,marginTop:10}}>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva tarea..." value={nt.texto} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,texto:e.target.value}}))} onKeyDown={e=>e.key==="Enter"&&agregarTareaAsunto(a.id,tipoLabel)}/>
+                <div style={{position:"relative",flex:"1 1 140px"}}>
+                  <input readOnly style={{...S.input,width:"100%",cursor:"pointer",background:"#f9f9f8",boxSizing:"border-box" as const}} placeholder="Fecha..." value={nt.fecha?formatFecha(nt.fecha):""} onClick={()=>{setAsuntoCalOpen(asuntoCalOpen===a.id?null:a.id);if(!asuntoCalMes){const h=new Date();setAsuntoCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>
+                  {asuntoCalOpen===a.id&&(
+                    <div className="calendario-posponer" style={{position:"absolute",bottom:34,left:0,zIndex:300}}>
+                      {renderCalendario(a.id,nt.fecha,(f)=>{setNtaMap(p=>({...p,[a.id]:{...nt,fecha:f}}));setAsuntoCalOpen(null)},asuntoCalMes,setAsuntoCalMes)}
+                    </div>
+                  )}
+                </div>
+                <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={nt.urgente} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,urgente:e.target.checked}}))}/> Urgente</label>
+                <button style={S.btnPrimary} onClick={()=>agregarTareaAsunto(a.id,tipoLabel)}>+ Agregar</button>
               </div>
-              <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={nt.urgente} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,urgente:e.target.checked}}))}/> Urgente</label>
-              <button style={S.btnPrimary} onClick={()=>agregarTareaAsunto(a.id,tipoLabel)}>+ Agregar</button>
             </div>
             {a.otraInfo&&<div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid #ebebeb"}}><div style={S.fieldLabel}>Información</div><div style={{fontSize:13}}>{a.otraInfo}</div></div>}
             {concluidas.length>0&&(
