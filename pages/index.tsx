@@ -1,11 +1,11 @@
 import { useSession, signIn, signOut } from "next-auth/react"
-import { useEffect, useState, useRef } from "react"
+import React, { useEffect, useState, useRef } from "react"
 
 // ─── TIPOS ───────────────────────────────────────────────────────────────────
 type Prueba    = { id: string; tipo: string; contenido?: string; detalle?: string; estado: string }
 type Honorario = { id: string; clienteContraparte?: string; total?: string; pagado?: string; estado: string; observaciones?: string }
 type ClienteJuicio = { id: string; apellido: string; nombre: string; dni?: string; correo?: string; telefono?: string; domicilio?: string }
-type Tarea     = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; asuntoId?: string; juicio?: { autos: string; id: string }; asunto?: { nombre: string; id: string }; info?: string; webUrl?: string }
+type Tarea     = { id: string; texto: string; fecha?: string; urgente: boolean; done: boolean; tipo?: string; tema?: string; juicioId?: string; asuntoId?: string; juicio?: { autos: string; id: string }; asunto?: { nombre: string; id: string }; info?: string; webUrl?: string; historial?: string }
 type Juicio    = { id: string; nro?: string; autos: string; estado: string; fuero?: string; juzgado?: string; secretaria?: string; sala?: string; advertencia?: string; driveUrl?: string; iaUrl?: string; datosJuzgado?: string; otraInfo?: string; compartidoCon?: string; categoria?: string; tareas: Tarea[]; pruebas: Prueba[]; honorarios?: Honorario[]; clientes?: ClienteJuicio[] }
 type Asunto    = { id: string; nombre: string; tipo: string; estado: string; advertencia?: string; otraInfo?: string; driveUrl?: string; webUrl?: string; tareas: Tarea[] }
 
@@ -86,6 +86,39 @@ const S: Record<string,React.CSSProperties> = {
   inputM:      {fontSize:13,padding:"6px 10px",border:"0.5px solid #ccc",borderRadius:8,background:"#f9f9f8",color:"#111",width:"100%",boxSizing:"border-box"},
 }
 
+// ─── COMPONENTE: HONORARIOS PAGADOS COLAPSABLE ───────────────────────────────
+function PagadosSection({pagados}: {pagados: any[]}) {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <div style={{marginTop:8}}>
+      <div style={{fontSize:12,color:"#aaa",cursor:"pointer",userSelect:"none",padding:"6px 0",display:"flex",alignItems:"center",gap:6}} onClick={()=>setOpen(v=>!v)}>
+        {open?"▾":"▸"} <span style={{fontWeight:500}}>Pago total ({pagados.length})</span>
+      </div>
+      {open&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10,marginTop:6}}>
+          {pagados.map((h,i)=>(
+            <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,background:"#f9f9f8",opacity:0.75}}>
+              <div style={{width:5,flexShrink:0,background:"#aaa",borderRadius:"12px 0 0 12px"}}/>
+              <div style={{flex:1,padding:"12px 14px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:4}}>
+                  <div style={{fontSize:14,fontWeight:500,color:"#888",lineHeight:1.3}}>{h.autos}</div>
+                  <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:"#EAF3DE",color:"#3B6D11",whiteSpace:"nowrap"}}>Pago total</span>
+                </div>
+                <div style={{fontSize:13,color:"#aaa",marginBottom:3}}>{h.clienteContraparte}</div>
+                <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                  {h.total&&<span style={{fontSize:12,color:"#bbb"}}>Total: <strong style={{color:"#aaa"}}>{h.total}</strong></span>}
+                  {h.pagado&&<span style={{fontSize:12,color:"#bbb"}}>Pagado: <strong style={{color:"#aaa"}}>{h.pagado}</strong></span>}
+                </div>
+                {h.observaciones&&<div style={{fontSize:11,color:"#bbb",marginTop:4}}>{h.observaciones}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 export default function Home() {
   const { data: session, status } = useSession()
@@ -119,6 +152,18 @@ export default function Home() {
   const [editUrgente, setEditUrgente] = useState(false)
   const [editInfo, setEditInfo]     = useState("")
   const [editWebUrl, setEditWebUrl] = useState("")
+  const [editHistorial, setEditHistorial] = useState("")
+
+  // Historial abierto (visualización)
+  const [historialOpen, setHistorialOpen] = useState<string|null>(null)
+
+  // Calendario panel derecho (nueva tarea)
+  const [panelCalOpen, setPanelCalOpen] = useState(false)
+  const [panelCalMes, setPanelCalMes] = useState<{y:number;m:number}|null>(null)
+
+  // Calendario formularios de asuntos (Pro Bono/Docencia/etc) — por asuntoId
+  const [asuntoCalOpen, setAsuntoCalOpen] = useState<string|null>(null)
+  const [asuntoCalMes, setAsuntoCalMes] = useState<{y:number;m:number}|null>(null)
 
   // Posponer
   const [posponerOpen, setPosponerOpen] = useState<string|null>(null)
@@ -334,15 +379,15 @@ export default function Home() {
   }
 
   const guardarEdicion = (t:Tarea, inmediato=false) => {
-    const body:any = {id:t.id,texto:editTexto,urgente:editUrgente,fecha:editFecha||null}
+    const body:any = {id:t.id,texto:editTexto,urgente:editUrgente,fecha:editFecha||null,historial:editHistorial}
     if(t.tipo==="Personales"){body.info=editInfo;body.webUrl=editWebUrl}
     fetch("/api/tareas",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
     if (inmediato) {
-      setTareas(ts=>ts.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}:x))
-      setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}:x)})))
-      setAsuntos(as=>as.map(a=>({...a,tareas:a.tareas.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}:x)})))
+      setTareas(ts=>ts.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined,historial:editHistorial}:x))
+      setJuicios(js=>js.map(j=>({...j,tareas:j.tareas.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined,historial:editHistorial}:x)})))
+      setAsuntos(as=>as.map(a=>({...a,tareas:a.tareas.map(x=>x.id===t.id?{...x,texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined,historial:editHistorial}:x)})))
     } else {
-      const cambio:Partial<Tarea> = {texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined}
+      const cambio:Partial<Tarea> = {texto:editTexto,urgente:editUrgente,fecha:editFecha||undefined,historial:editHistorial}
       if(t.tipo==="Personales"){cambio.info=editInfo;cambio.webUrl=editWebUrl}
       setCambios(p=>({...p,[t.id]:{...p[t.id],...cambio}}))
     }
@@ -588,16 +633,77 @@ export default function Home() {
     } catch(e:any) { alert(`Error al descargar backup: ${e?.message||e}`) }
   }
 
+  // ─── HELPER: CALENDARIO MINI ─────────────────────────────────────────────────
+  // Usado en posponer, panel derecho y formularios de asuntos
+  const renderCalendario = (
+    calId: string,
+    fechaActual: string,
+    setFecha: (f:string)=>void,
+    mes: {y:number;m:number}|null,
+    setMes: (m:{y:number;m:number})=>void,
+    onClose?: ()=>void,
+    style?: React.CSSProperties
+  ) => {
+    const hoyD = new Date(); hoyD.setHours(0,0,0,0)
+    const vm = mes || {y:hoyD.getFullYear(),m:hoyD.getMonth()}
+    const y = vm.y, m = vm.m
+    const primerDia = new Date(y,m,1)
+    const offset = (primerDia.getDay()+6)%7
+    const diasEnMes = new Date(y,m+1,0).getDate()
+    const diasSigMes = new Date(y,m+1,1)
+    const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+    // Celdas: nulls al inicio, días del mes, días del mes siguiente para completar la semana
+    const celdas: {dia:number;sigMes?:boolean}[] = [
+      ...Array(offset).fill(null),
+      ...Array(diasEnMes).fill(0).map((_,i)=>({dia:i+1}))
+    ]
+    while(celdas.length%7!==0) {
+      const extra = celdas.filter(c=>c&&c.sigMes).length+1
+      celdas.push({dia:extra,sigMes:true})
+    }
+    return (
+      <div className="calendario-posponer" style={{background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:10,padding:"10px",boxShadow:"0 4px 16px rgba(0,0,0,0.14)",zIndex:200,width:220,...style}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <button style={{...S.btnMini,fontSize:14}} onClick={()=>setMes(m===0?{y:y-1,m:11}:{y,m:m-1})}>‹</button>
+          <span style={{fontSize:12,fontWeight:500}}>{meses[m]} {y}</span>
+          <button style={{...S.btnMini,fontSize:14}} onClick={()=>setMes(m===11?{y:y+1,m:0}:{y,m:m+1})}>›</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:6}}>
+          {["Lu","Ma","Mi","Ju","Vi","Sa","Do"].map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:"#aaa",fontWeight:600}}>{d}</div>)}
+          {celdas.map((cell,i)=>{
+            if(!cell) return <div key={i}/>
+            const {dia,sigMes} = cell
+            const mesReal = sigMes ? m+1 : m
+            const yReal = mesReal>11 ? y+1 : y
+            const mReal = mesReal>11 ? 0 : mesReal
+            const thisDate = new Date(yReal,mReal,dia)
+            const key2 = `${yReal}-${String(mReal+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`
+            const isSelected = fechaActual===key2
+            const isHoy = thisDate.getTime()===hoyD.getTime()
+            const isPast = thisDate < hoyD
+            if(sigMes) return <div key={i} style={{textAlign:"center",fontSize:11,padding:"3px 0",color:"#ccc"}}>{dia}</div>
+            return <div key={i} onClick={()=>!isPast&&setFecha(key2)} style={{textAlign:"center",fontSize:12,padding:"3px 0",borderRadius:4,cursor:isPast?"default":"pointer",background:isSelected?"#378ADD":isHoy?"#E6F1FB":"transparent",color:isSelected?"#fff":isPast?"#ccc":isHoy?"#185FA5":"#111",fontWeight:isSelected||isHoy?600:400}}>{dia}</div>
+          })}
+        </div>
+        {onClose&&<div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+          <button style={S.btn} onClick={onClose}>Cancelar</button>
+        </div>}
+      </div>
+    )
+  }
+
   // ─── RENDER: TAREA (panel tareas) ────────────────────────────────────────────
-  const renderTarea = (t:Tarea) => {
+  const renderTarea = (t:Tarea, esProximaTask=false) => {
     const isDone   = cambios[t.id]?.done    ?? t.done
     const urgente  = cambios[t.id]?.urgente ?? t.urgente
     const fecha    = cambios[t.id]?.fecha   ?? t.fecha
     const texto    = cambios[t.id]?.texto   ?? t.texto
+    const historial = cambios[t.id]?.historial ?? t.historial
     const isEdit   = editId===t.id
+    const isHistorialOpen = historialOpen===t.id
     const tipoLabel = t.tipo==="Juicio"?"Casos y Juicios":t.tipo==="Personales"?"Asuntos Personales":t.tipo||"Casos y Juicios"
     const franja   = FRANJA[tipoLabel]||FRANJA[t.tipo||""]||"#888"
-    const bgColor  = isDone?"#f9f9f8":urgente?"#FFF0F0":esAtrasada({...t,fecha})?"#F5F0FF":"#fff"
+    const bgColor  = isDone?"#f9f9f8":urgente?"#FFF0F0":esAtrasada({...t,fecha})?"#F5F0FF":esProximaTask?"#F7F7F5":"#fff"
     const bdrColor = isDone?"#e5e7eb":urgente?"#E24B4A":esAtrasada({...t,fecha})?"#C9A8F0":"#e5e7eb"
     const juicioInfo = t.juicioId ? juicios.find(j=>j.id===t.juicioId) : null
     const driveUrl   = juicioInfo?.driveUrl
@@ -620,7 +726,7 @@ export default function Home() {
               <span className="caratula"
                 style={{fontSize:14,fontWeight:600,color:isDone?"#aaa":franja,cursor:"pointer",lineHeight:1.4,textDecoration:isDone?"line-through":"none"}}
                 onClick={e=>{e.stopPropagation();if(t.juicioId){setPanel("juicios");setExpandido(t.juicioId);setTabActiva(p=>({...p,[t.juicioId!]:"tareas"}))}else if(t.asuntoId){const a=asuntos.find(x=>x.id===t.asuntoId);if(a){setPanel(a.tipo==="probono"?"probono":a.tipo==="consultoria"?"consultoria":"docencia");setExpandidoSet(s=>{const n=new Set(s);n.add(t.asuntoId!);return n})}}}}
-              >{t.juicio?.autos||t.asunto?.nombre||t.tema||tipoLabel}</span>
+              >{t.tipo==="Personales"&&!t.juicioId&&!t.asuntoId ? texto : (t.juicio?.autos||t.asunto?.nombre||t.tema||tipoLabel)}</span>
               {isEdit?(
                 <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:6}}>
                   <input style={{...S.input,fontSize:13}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
@@ -638,15 +744,34 @@ export default function Home() {
                       <input style={{...S.input,flex:"2 1 180px"}} placeholder="Link web (https://...)" value={editWebUrl} onChange={e=>setEditWebUrl(e.target.value)}/>
                     </div>
                   )}
+                  <div>
+                    <div style={{fontSize:11,color:"#888",marginBottom:3}}>Historial</div>
+                    <textarea style={{...S.input,width:"100%",minHeight:70,resize:"vertical",boxSizing:"border-box" as const}} placeholder="Anotá qué fuiste haciendo..." value={editHistorial} onChange={e=>setEditHistorial(e.target.value)}/>
+                  </div>
                 </div>
               ):(
-                <div style={{fontSize:14,color:isDone?"#aaa":"#222",textDecoration:isDone?"line-through":"none",marginTop:4,lineHeight:1.35}}>{texto}</div>
+                <>
+                  {!(t.tipo==="Personales"&&!t.juicioId&&!t.asuntoId)&&(
+                    <div style={{fontSize:14,color:isDone?"#aaa":"#222",textDecoration:isDone?"line-through":"none",marginTop:4,lineHeight:1.35}}>{texto}</div>
+                  )}
+                  {t.tipo==="Personales"&&!t.juicioId&&!t.asuntoId&&t.info&&(
+                    <div style={{fontSize:12,color:"#888",marginTop:3,lineHeight:1.4}}>{t.info}</div>
+                  )}
+                </>
               )}
             </div>
             {!isEdit&&!isDone&&(
-              <button style={S.btnEdit} onClick={e=>{e.stopPropagation();setEditId(t.id);setEditTexto(texto);setEditFecha(fecha?fecha.split("T")[0]:"");setEditUrgente(urgente);setEditInfo(t.info||"");setEditWebUrl(t.webUrl||"")}}>✎</button>
+              <button style={S.btnEdit} onClick={e=>{e.stopPropagation();setEditId(t.id);setEditTexto(texto);setEditFecha(fecha?fecha.split("T")[0]:"");setEditUrgente(urgente);setEditInfo(t.info||"");setEditWebUrl(t.webUrl||"");setEditHistorial(historial||"")}}>✎</button>
             )}
           </div>
+          {!isEdit&&historial&&!isDone&&(
+            <div style={{marginTop:6}}>
+              <div style={{fontSize:11,color:"#888",cursor:"pointer",userSelect:"none" as const}} onClick={e=>{e.stopPropagation();setHistorialOpen(isHistorialOpen?null:t.id)}}>
+                {isHistorialOpen?"▾":"▸"} Historial
+              </div>
+              {isHistorialOpen&&<div style={{fontSize:12,color:"#555",marginTop:4,padding:"6px 8px",background:"#f9f9f8",borderRadius:6,whiteSpace:"pre-wrap" as const,lineHeight:1.5}}>{historial}</div>}
+            </div>
+          )}
           {!isEdit&&(
             <div style={{display:"flex",alignItems:"center",gap:7,marginTop:9,paddingTop:8,borderTop:"0.5px solid #ebebeb",flexWrap:"wrap"}}>
               {driveUrl&&<a href={driveUrl} target="_blank" rel="noopener noreferrer" style={S.linkDrive} onClick={e=>e.stopPropagation()}>📁 Drive</a>}
@@ -657,43 +782,20 @@ export default function Home() {
               {!isDone&&(
                 <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
                   <button style={S.btnPosponer} onClick={()=>{const open=posponerOpen===t.id?null:t.id;setPosponerOpen(open);setPosponerFecha("");if(open){const h=new Date();setPosponerMes({y:h.getFullYear(),m:h.getMonth()})}}}>↷ Posponer</button>
-                  {posponerOpen===t.id&&(()=>{
-                    const hoyD = new Date(); hoyD.setHours(0,0,0,0)
-                    const selDate = posponerFecha ? new Date(posponerFecha+"T00:00:00") : null
-                    const vm = posponerMes || {y:hoyD.getFullYear(),m:hoyD.getMonth()}
-                    const y = vm.y, m = vm.m
-                    const primerDia = new Date(y,m,1)
-                    const offset = (primerDia.getDay()+6)%7
-                    const diasEnMes = new Date(y,m+1,0).getDate()
-                    const celdas: (number|null)[] = [...Array(offset).fill(null), ...Array(diasEnMes).fill(0).map((_,i)=>i+1)]
-                    while(celdas.length%7!==0) celdas.push(null)
-                    const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
-                    return (
-                      <div className="calendario-posponer" style={{position:"absolute",top:30,right:0,background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:10,padding:"10px",boxShadow:"0 4px 16px rgba(0,0,0,0.14)",zIndex:200,width:220}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                          <button style={{...S.btnMini,fontSize:14}} onClick={()=>setPosponerMes(m===0?{y:y-1,m:11}:{y,m:m-1})}>‹</button>
-                          <span style={{fontSize:12,fontWeight:500}}>{meses[m]} {y}</span>
-                          <button style={{...S.btnMini,fontSize:14}} onClick={()=>setPosponerMes(m===11?{y:y+1,m:0}:{y,m:m+1})}>›</button>
-                        </div>
-                        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:6}}>
-                          {["Lu","Ma","Mi","Ju","Vi","Sa","Do"].map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:"#aaa",fontWeight:600}}>{d}</div>)}
-                          {celdas.map((dia,i)=>{
-                            if(!dia) return <div key={i}/>
-                            const thisDate = new Date(y,m,dia)
-                            const key2 = `${y}-${String(m+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`
-                            const isSelected = posponerFecha===key2
-                            const isHoy = thisDate.getTime()===hoyD.getTime()
-                            const isPast = thisDate < hoyD
-                            return <div key={i} onClick={()=>!isPast&&setPosponerFecha(key2)} style={{textAlign:"center",fontSize:12,padding:"3px 0",borderRadius:4,cursor:isPast?"default":"pointer",background:isSelected?"#378ADD":isHoy?"#E6F1FB":"transparent",color:isSelected?"#fff":isPast?"#ccc":isHoy?"#185FA5":"#111",fontWeight:isSelected||isHoy?600:400}}>{dia}</div>
-                          })}
-                        </div>
-                        <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
-                          <button style={S.btn} onClick={()=>setPosponerOpen(null)}>Cancelar</button>
-                          <button style={{...S.btnPrimary,opacity:posponerFecha?1:0.4}} onClick={()=>posponerFecha&&posponer(t)}>OK</button>
-                        </div>
+                  {posponerOpen===t.id&&(
+                    <div style={{position:"absolute",top:30,right:0,zIndex:200}}>
+                      {renderCalendario(
+                        t.id, posponerFecha, setPosponerFecha,
+                        posponerMes, setPosponerMes,
+                        undefined,
+                        {}
+                      )}
+                      <div style={{display:"flex",gap:6,justifyContent:"flex-end",marginTop:4}}>
+                        <button style={S.btn} onClick={()=>setPosponerOpen(null)}>Cancelar</button>
+                        <button style={{...S.btnPrimary,opacity:posponerFecha?1:0.4}} onClick={()=>posponerFecha&&posponer(t)}>OK</button>
                       </div>
-                    )
-                  })()}
+                    </div>
+                  )}
                 </div>
               )}
               {!isDone&&<button style={{...S.btnUrgente,...(urgente?{background:"#E24B4A",color:"#fff"}:{})}} onClick={e=>{e.stopPropagation();toggleUrgente(t)}}>! urgente</button>}
@@ -710,7 +812,6 @@ export default function Home() {
     const idsComp  = new Set(completadas.map(t=>t.id))
     let itemsConDatos = vistaActual.filter(t=>idsItems.has(t.id))
     const compConDatos  = vistaActual.filter(t=>idsComp.has(t.id))
-    // PRÓXIMAS: ordenar solo por fecha, urgente no prioriza aquí
     if (label==="PRÓXIMAS TAREAS") {
       itemsConDatos = [...itemsConDatos].sort((a,b)=>{
         if(!a.fecha&&!b.fecha)return 0; if(!a.fecha)return 1; if(!b.fecha)return -1
@@ -719,10 +820,11 @@ export default function Home() {
     }
     const todas = [...itemsConDatos, ...compConDatos]
     if(todas.length===0)return null
+    const esProxima = label==="PRÓXIMAS TAREAS"
     return (
       <div key={label}>
         <div style={{...S.sectionLabel,color:color||"#888"}}>{label}</div>
-        {todas.map(t=>renderTarea(t))}
+        {todas.map(t=>renderTarea(t,esProxima))}
       </div>
     )
   }
@@ -731,14 +833,19 @@ export default function Home() {
   const juicioPanel = juicioSeleccionado ? juicios.find(j=>j.id===juicioSeleccionado) : null
   const asuntoPanel = asuntoSeleccionado ? asuntos.find(a=>a.id===asuntoSeleccionado) : null
   const renderPanelDerecho = () => {
+    // Filtrar tareasActivas según filtroTipos activos
+    const tareasResumen = filtroTipos.length===0 ? tareasActivas : tareasActivas.filter(t=>{
+      const label = t.tipo==="Juicio"?"Casos y Juicios":t.tipo==="Personales"?"Asuntos Personales":t.tipo||"Casos y Juicios"
+      return filtroTipos.includes(label)
+    })
     if (!juicioPanel && !asuntoPanel) return (
       <div style={{padding:"18px 16px"}}>
-        <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em",marginBottom:14}}>RESUMEN</div>
+        <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em",marginBottom:14}}>RESUMEN{filtroTipos.length>0?` · ${filtroTipos.join(", ")}`:""}</div>
         {[
-          {num:tareasActivas.filter(t=>esHoy_(t)).length, label:"Vencen hoy",  color:"#378ADD"},
-          {num:tareasActivas.filter(t=>t.urgente).length, label:"Urgentes",    color:"#E24B4A"},
-          {num:tareasActivas.filter(t=>esAtrasada(t)).length, label:"Atrasadas",color:"#9B59B6"},
-          {num:tareasActivas.length,                       label:"Total activas",color:"#111"},
+          {num:tareasResumen.filter(t=>esHoy_(t)).length, label:"Vencen hoy",  color:"#378ADD"},
+          {num:tareasResumen.filter(t=>t.urgente).length, label:"Urgentes",    color:"#E24B4A"},
+          {num:tareasResumen.filter(t=>esAtrasada(t)).length, label:"Atrasadas",color:"#9B59B6"},
+          {num:tareasResumen.length,                       label:"Total activas",color:"#111"},
         ].map(m=>(
           <div key={m.label} style={{background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:10,padding:"14px 16px",marginBottom:8}}>
             <div style={{fontSize:28,fontWeight:500,color:m.color}}>{m.num}</div>
@@ -772,12 +879,22 @@ export default function Home() {
           )}
           <div style={{marginTop:14,paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
             <div style={S.fieldLabel}>NUEVA TAREA</div>
-            <input style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} placeholder="Texto de la tarea..." value={ntPanel.texto} onChange={e=>setNtPanel(p=>({...p,texto:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"&&ntPanel.texto.trim()){const txt=ntPanel.texto,fch=ntPanel.fecha;setNtPanel({texto:"",fecha:""});agregarTareaAsunto(asuntoPanel.id,tipoLabel,txt,fch)}}}/>
-            <input type="date" style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} value={ntPanel.fecha} onChange={e=>setNtPanel(p=>({...p,fecha:e.target.value}))}/>
+            <input style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} placeholder="Texto de la tarea..." value={ntPanel.texto} onChange={e=>setNtPanel(p=>({...p,texto:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"&&ntPanel.texto.trim()){const txt=ntPanel.texto,fch=ntPanel.fecha;setNtPanel({texto:"",fecha:""});setPanelCalOpen(false);agregarTareaAsunto(asuntoPanel.id,tipoLabel,txt,fch)}}}/>
+            <div style={{marginTop:6,position:"relative"}}>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input readOnly style={{...S.input,flex:1,cursor:"pointer",background:"#f9f9f8"}} placeholder="Fecha (opcional)" value={ntPanel.fecha?formatFecha(ntPanel.fecha):""} onClick={()=>{setPanelCalOpen(v=>!v);if(!panelCalMes){const h=new Date();setPanelCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>
+                {ntPanel.fecha&&<button style={S.btnMini} onClick={()=>{setNtPanel(p=>({...p,fecha:""}));setPanelCalOpen(false)}}>✕</button>}
+              </div>
+              {panelCalOpen&&(
+                <div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:200}}>
+                  {renderCalendario("panel",ntPanel.fecha,(f)=>{setNtPanel(p=>({...p,fecha:f}));setPanelCalOpen(false)},panelCalMes,setPanelCalMes)}
+                </div>
+              )}
+            </div>
             <button style={{...S.btnPrimary,width:"100%",marginTop:6}} onClick={()=>{
               if(!ntPanel.texto.trim())return
               const txt=ntPanel.texto, fch=ntPanel.fecha
-              setNtPanel({texto:"",fecha:""})
+              setNtPanel({texto:"",fecha:""}); setPanelCalOpen(false)
               agregarTareaAsunto(asuntoPanel.id,tipoLabel,txt,fch)
             }}>+ Agregar tarea</button>
           </div>
@@ -812,11 +929,21 @@ export default function Home() {
           <div style={{marginTop:14,paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
             <div style={S.fieldLabel}>NUEVA TAREA</div>
             <input style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} placeholder="Texto de la tarea..." value={ntPanel.texto} onChange={e=>setNtPanel(p=>({...p,texto:e.target.value}))}/>
-            <input type="date" style={{...S.input,width:"100%",marginTop:6,boxSizing:"border-box" as const}} value={ntPanel.fecha} onChange={e=>setNtPanel(p=>({...p,fecha:e.target.value}))}/>
+            <div style={{marginTop:6,position:"relative"}}>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input readOnly style={{...S.input,flex:1,cursor:"pointer",background:"#f9f9f8"}} placeholder="Fecha (opcional)" value={ntPanel.fecha?formatFecha(ntPanel.fecha):""} onClick={()=>{setPanelCalOpen(v=>!v);if(!panelCalMes){const h=new Date();setPanelCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>
+                {ntPanel.fecha&&<button style={S.btnMini} onClick={()=>{setNtPanel(p=>({...p,fecha:""}));setPanelCalOpen(false)}}>✕</button>}
+              </div>
+              {panelCalOpen&&(
+                <div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:200}}>
+                  {renderCalendario("panel",ntPanel.fecha,(f)=>{setNtPanel(p=>({...p,fecha:f}));setPanelCalOpen(false)},panelCalMes,setPanelCalMes)}
+                </div>
+              )}
+            </div>
             <button style={{...S.btnPrimary,width:"100%",marginTop:6}} onClick={()=>{
               if(!ntPanel.texto.trim())return
               const txt=ntPanel.texto, fch=ntPanel.fecha
-              setNtPanel({texto:"",fecha:""})
+              setNtPanel({texto:"",fecha:""}); setPanelCalOpen(false)
               agregarTareaJuicio(juicioPanel.id,txt,fch)
             }}>+ Agregar tarea</button>
           </div>
@@ -1110,7 +1237,7 @@ export default function Home() {
     const exp    = expandidoSet.has(a.id)
     const toggleExp = () => setExpandidoSet(s=>{ const n=new Set(s); n.has(a.id)?n.delete(a.id):n.add(a.id); return n })
     const nt     = ntaMap[a.id]||{texto:"",fecha:"",urgente:false}
-    const activas = a.tareas.filter(t=>!t.done).sort((a,b)=>{if(a.urgente&&!b.urgente)return -1;if(!a.urgente&&b.urgente)return 1;if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
+    const activas = a.tareas.filter(t=>!t.done).sort((a,b)=>{if(!a.fecha)return 1;if(!b.fecha)return -1;return parseFecha(a.fecha).getTime()-parseFecha(b.fecha).getTime()})
     const concluidas = a.tareas.filter(t=>t.done).slice(-5)
     const tipoLabel = a.tipo==="probono"?"Pro Bono":a.tipo==="consultoria"?"Consultoría":"Docencia"
     return (
@@ -1159,7 +1286,14 @@ export default function Home() {
             {activas.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"4px 0"}}>Sin tareas activas</div>}
             <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
               <input style={{...S.input,flex:"3 1 200px"}} placeholder="Nueva tarea..." value={nt.texto} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,texto:e.target.value}}))} onKeyDown={e=>e.key==="Enter"&&agregarTareaAsunto(a.id,tipoLabel)}/>
-              <input type="date" style={{...S.input,flex:"1 1 140px"}} value={nt.fecha} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,fecha:e.target.value}}))}/>
+              <div style={{position:"relative",flex:"1 1 140px"}}>
+                <input readOnly style={{...S.input,width:"100%",cursor:"pointer",background:"#f9f9f8",boxSizing:"border-box" as const}} placeholder="Fecha..." value={nt.fecha?formatFecha(nt.fecha):""} onClick={()=>{setAsuntoCalOpen(asuntoCalOpen===a.id?null:a.id);if(!asuntoCalMes){const h=new Date();setAsuntoCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>
+                {asuntoCalOpen===a.id&&(
+                  <div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:200}}>
+                    {renderCalendario(a.id,nt.fecha,(f)=>{setNtaMap(p=>({...p,[a.id]:{...nt,fecha:f}}));setAsuntoCalOpen(null)},asuntoCalMes,setAsuntoCalMes)}
+                  </div>
+                )}
+              </div>
               <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={nt.urgente} onChange={e=>setNtaMap(p=>({...p,[a.id]:{...nt,urgente:e.target.checked}}))}/> Urgente</label>
               <button style={S.btnPrimary} onClick={()=>agregarTareaAsunto(a.id,tipoLabel)}>+ Agregar</button>
             </div>
@@ -1476,47 +1610,47 @@ export default function Home() {
                 {tareasPersonales.map(t=>(
                   <div key={t.id}>
                     {renderTarea(t)}
-                    {(t.info||t.webUrl)&&(
-                      <div style={{marginTop:-4,marginBottom:6,padding:"6px 12px 8px 18px",background:"#fafafa",border:"0.5px solid #e5e7eb",borderTop:"none",borderRadius:"0 0 10px 10px",fontSize:12,color:"#555",display:"flex",gap:12,flexWrap:"wrap" as const}}>
-                        {t.info&&<span>{t.info}</span>}
-                        {t.webUrl&&<a href={t.webUrl} target="_blank" rel="noopener noreferrer" style={{color:"#378ADD",textDecoration:"none"}}>🌐 {t.webUrl}</a>}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
             )}
 
             {/* Panel Honorarios */}
-            {!loading&&panel==="honorarios"&&(
-              <div>
-                {honorariosPendientes.length===0?<div style={{color:"#aaa",fontSize:14}}>No hay honorarios pendientes.</div>:(
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
-                    {honorariosPendientes.map((h,i)=>{
-                      const hc = h.estado==="Pago Parcial"?"#185FA5":"#633806"
-                      const hb = h.estado==="Pago Parcial"?"#E6F1FB":"#FAEEDA"
-                      return (
-                        <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,background:"#fff"}}>
-                          <div style={{width:5,flexShrink:0,background:hc,borderRadius:"12px 0 0 12px"}}/>
-                          <div style={{flex:1,padding:"12px 14px"}}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:4}}>
-                              <div style={{fontSize:14,fontWeight:500,color:FRANJA["Casos y Juicios"],lineHeight:1.3}}>{(h as any).autos}</div>
-                              <span style={{...S.badge,background:hb,color:hc,flexShrink:0}}>{h.estado}</span>
+            {!loading&&panel==="honorarios"&&(()=>{
+              const pendientes = juicios.flatMap(j=>(j.honorarios||[]).filter(h=>h.estado!=="Pago total").map(h=>({...h,autos:j.autos})))
+              const pagados    = juicios.flatMap(j=>(j.honorarios||[]).filter(h=>h.estado==="Pago total").map(h=>({...h,autos:j.autos})))
+              return (
+                <div>
+                  {pendientes.length===0&&pagados.length===0&&<div style={{color:"#aaa",fontSize:14}}>No hay honorarios cargados.</div>}
+                  {pendientes.length>0&&(
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10,marginBottom:16}}>
+                      {pendientes.map((h,i)=>{
+                        const hc = h.estado==="Pago Parcial"?"#185FA5":"#633806"
+                        const hb = h.estado==="Pago Parcial"?"#E6F1FB":"#FAEEDA"
+                        return (
+                          <div key={i} style={{display:"flex",overflow:"hidden",border:"0.5px solid #e5e7eb",borderRadius:12,background:"#fff"}}>
+                            <div style={{width:5,flexShrink:0,background:hc,borderRadius:"12px 0 0 12px"}}/>
+                            <div style={{flex:1,padding:"12px 14px"}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:4}}>
+                                <div style={{fontSize:14,fontWeight:500,color:FRANJA["Casos y Juicios"],lineHeight:1.3}}>{(h as any).autos}</div>
+                                <span style={{...S.badge,background:hb,color:hc,flexShrink:0}}>{h.estado}</span>
+                              </div>
+                              <div style={{fontSize:13,color:"#333",marginBottom:3}}>{h.clienteContraparte}</div>
+                              <div style={{display:"flex",gap:12,flexWrap:"wrap" as const}}>
+                                {h.total&&<span style={{fontSize:12,color:"#888"}}>Total: <strong style={{color:"#333"}}>{h.total}</strong></span>}
+                                {h.pagado&&<span style={{fontSize:12,color:"#888"}}>Pagado: <strong style={{color:"#333"}}>{h.pagado}</strong></span>}
+                              </div>
+                              {h.observaciones&&<div style={{fontSize:11,color:"#aaa",marginTop:4}}>{h.observaciones}</div>}
                             </div>
-                            <div style={{fontSize:13,color:"#333",marginBottom:3}}>{h.clienteContraparte}</div>
-                            <div style={{display:"flex",gap:12,flexWrap:"wrap" as const}}>
-                              {h.total&&<span style={{fontSize:12,color:"#888"}}>Total: <strong style={{color:"#333"}}>{h.total}</strong></span>}
-                              {h.pagado&&<span style={{fontSize:12,color:"#888"}}>Pagado: <strong style={{color:"#333"}}>{h.pagado}</strong></span>}
-                            </div>
-                            {h.observaciones&&<div style={{fontSize:11,color:"#aaa",marginTop:4}}>{h.observaciones}</div>}
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+                        )
+                      })}
+                    </div>
+                  )}
+                  {pagados.length>0&&<PagadosSection pagados={pagados}/>}
+                </div>
+              )
+            })()}
 
             {/* Panel Clientes */}
             {!loading&&panel==="clientes"&&(

@@ -40,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "PUT") {
-    const { id, texto, fecha, urgente, done, tipo, tema } = req.body
+    const { id, texto, fecha, urgente, done, tipo, tema, historial, info, webUrl } = req.body
     const data: any = {}
     if (texto !== undefined) data.texto = texto
     if (fecha !== undefined) data.fecha = fecha ? new Date(fecha) : null
@@ -48,6 +48,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (done !== undefined) data.done = done
     if (tipo !== undefined) data.tipo = tipo
     if (tema !== undefined) data.tema = tema
+    if (historial !== undefined) data.historial = historial
+    if (info !== undefined) data.info = info
+    if (webUrl !== undefined) data.webUrl = webUrl
     const tarea = await prisma.tarea.update({ where: { id }, data })
     return res.json(tarea)
   }
