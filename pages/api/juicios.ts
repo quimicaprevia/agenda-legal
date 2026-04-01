@@ -22,11 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "POST") {
-    const { autos, estado, nro, fuero, juzgado, secretaria, sala, advertencia, datosJuzgado, otraInfo, driveUrl, iaUrl, pjnUrl } = req.body
+    const { autos, estado, nro, fuero, juzgado, secretaria, sala, advertencia, datosJuzgado, otraInfo, compartidoCon, categoria, driveUrl, iaUrl, pjnUrl } = req.body
     const juicio = await prisma.juicio.create({
       data: {
         autos, estado, nro, fuero, juzgado, secretaria, sala, advertencia,
-        datosJuzgado, otraInfo, driveUrl, iaUrl, pjnUrl,
+        datosJuzgado, otraInfo, compartidoCon, categoria, driveUrl, iaUrl, pjnUrl,
         tipo: "Juicio",
         userId: user.id
       },
@@ -36,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "PUT") {
-    const { id, autos, estado, nro, fuero, juzgado, secretaria, sala, advertencia, datosJuzgado, otraInfo, driveUrl, iaUrl, pjnUrl } = req.body
+    const { id, autos, estado, nro, fuero, juzgado, secretaria, sala, advertencia, datosJuzgado, otraInfo, compartidoCon, categoria, driveUrl, iaUrl, pjnUrl } = req.body
     const data: any = {}
     if (autos !== undefined) data.autos = autos
     if (estado !== undefined) data.estado = estado
@@ -48,6 +48,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (advertencia !== undefined) data.advertencia = advertencia
     if (datosJuzgado !== undefined) data.datosJuzgado = datosJuzgado
     if (otraInfo !== undefined) data.otraInfo = otraInfo
+    if (compartidoCon !== undefined) data.compartidoCon = compartidoCon
+    if (categoria !== undefined) data.categoria = categoria
     if (driveUrl !== undefined) data.driveUrl = driveUrl
     if (iaUrl !== undefined) data.iaUrl = iaUrl
     if (pjnUrl !== undefined) data.pjnUrl = pjnUrl
