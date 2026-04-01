@@ -1038,13 +1038,25 @@ export default function Home() {
                       {t.urgente&&<span style={{fontSize:10,color:"#A32D2D",fontWeight:600,background:"#FCEBEB",padding:"1px 6px",borderRadius:8}}>URG</span>}
                       {t.fecha&&<span style={{fontSize:11,color:"#888",whiteSpace:"nowrap"}}>{formatFecha(t.fecha)}</span>}
                       <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}} onClick={()=>toggleUrgente(t,true)}>!</button>
-                      <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente)}}>✎</button>
+                      <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente);setEditHistorial(t.historial||"")}}>✎</button>
                     </div>
+                    {editId!==t.id&&t.historial&&(
+                      <div style={{padding:"0 14px 8px"}}>
+                        <div style={{fontSize:11,color:"#888",cursor:"pointer",userSelect:"none"}} onClick={()=>setHistorialOpen(historialOpen===t.id?null:t.id)}>
+                          {historialOpen===t.id?"▾":"▸"} Historial
+                        </div>
+                        {historialOpen===t.id&&<div style={{fontSize:12,color:"#555",marginTop:4,padding:"6px 8px",background:"#f9f9f8",borderRadius:6,whiteSpace:"pre-wrap",lineHeight:1.5}}>{t.historial}</div>}
+                      </div>
+                    )}
                     {editId===t.id&&(
                       <div style={{padding:"0 14px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
                         <input style={{...S.input,flex:"3 1 180px"}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
                         <div style={{position:"relative",flex:"1 1 130px"}}><input readOnly style={{...S.input,width:"100%",cursor:"pointer",background:"#f9f9f8"}} placeholder="Fecha..." value={editFecha?formatFecha(editFecha):""} onClick={()=>{setEditJuicioCalOpen(v=>!v);if(!editJuicioCalMes){const h=new Date();setEditJuicioCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>{editJuicioCalOpen&&<div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:300}}>{renderCalendario("editj",editFecha,(f)=>{setEditFecha(f);setEditJuicioCalOpen(false)},editJuicioCalMes,setEditJuicioCalMes)}</div>}</div>
                         <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente</label>
+                        <div style={{width:"100%"}}>
+                          <div style={{fontSize:11,color:"#888",marginBottom:2}}>Historial</div>
+                          <textarea style={{...S.input,width:"100%",minHeight:60,resize:"vertical",boxSizing:"border-box"}} placeholder="Anotá qué fuiste haciendo..." value={editHistorial} onChange={e=>setEditHistorial(e.target.value)}/>
+                        </div>
                         <button style={S.btnPrimary} onClick={()=>guardarEdicion(t,true)}>Guardar</button>
                         <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
                       </div>
@@ -1292,13 +1304,25 @@ export default function Home() {
                   {t.urgente&&<span style={{fontSize:10,color:"#A32D2D",fontWeight:600,background:"#FCEBEB",padding:"1px 6px",borderRadius:8}}>URG</span>}
                   {t.fecha&&<span style={{fontSize:11,color:"#888",whiteSpace:"nowrap"}}>{formatFecha(t.fecha)}</span>}
                   <button style={{...S.btnMini,color:t.urgente?"#A32D2D":"#aaa",fontWeight:700}} onClick={()=>toggleUrgente(t,true)}>!</button>
-                  <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente)}}>✎</button>
+                  <button style={S.btnMini} onClick={()=>{setEditId(t.id);setEditTexto(t.texto);setEditFecha(t.fecha?t.fecha.split("T")[0]:"");setEditUrgente(t.urgente);setEditHistorial(t.historial||"")}}>✎</button>
                 </div>
+                {editId!==t.id&&t.historial&&(
+                  <div style={{padding:"0 14px 8px"}}>
+                    <div style={{fontSize:11,color:"#888",cursor:"pointer",userSelect:"none"}} onClick={()=>setHistorialOpen(historialOpen===t.id?null:t.id)}>
+                      {historialOpen===t.id?"▾":"▸"} Historial
+                    </div>
+                    {historialOpen===t.id&&<div style={{fontSize:12,color:"#555",marginTop:4,padding:"6px 8px",background:"#f9f9f8",borderRadius:6,whiteSpace:"pre-wrap",lineHeight:1.5}}>{t.historial}</div>}
+                  </div>
+                )}
                 {editId===t.id&&(
                   <div style={{padding:"0 14px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
                     <input style={{...S.input,flex:"3 1 180px"}} value={editTexto} onChange={e=>setEditTexto(e.target.value)} autoFocus/>
                     <div style={{position:"relative",flex:"1 1 130px"}}><input readOnly style={{...S.input,width:"100%",cursor:"pointer",background:"#f9f9f8"}} placeholder="Fecha..." value={editFecha?formatFecha(editFecha):""} onClick={()=>{setEditJuicioCalOpen(v=>!v);if(!editJuicioCalMes){const h=new Date();setEditJuicioCalMes({y:h.getFullYear(),m:h.getMonth()})}}}/>{editJuicioCalOpen&&<div className="calendario-posponer" style={{position:"absolute",top:34,left:0,zIndex:300}}>{renderCalendario("editj",editFecha,(f)=>{setEditFecha(f);setEditJuicioCalOpen(false)},editJuicioCalMes,setEditJuicioCalMes)}</div>}</div>
                     <label style={{fontSize:12,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="checkbox" checked={editUrgente} onChange={e=>setEditUrgente(e.target.checked)}/> Urgente</label>
+                    <div style={{width:"100%"}}>
+                      <div style={{fontSize:11,color:"#888",marginBottom:2}}>Historial</div>
+                      <textarea style={{...S.input,width:"100%",minHeight:60,resize:"vertical",boxSizing:"border-box"}} placeholder="Anotá qué fuiste haciendo..." value={editHistorial} onChange={e=>setEditHistorial(e.target.value)}/>
+                    </div>
                     <button style={S.btnPrimary} onClick={()=>guardarEdicion(t,true)}>Guardar</button>
                     <button style={S.btn} onClick={()=>setEditId(null)}>✕</button>
                   </div>
