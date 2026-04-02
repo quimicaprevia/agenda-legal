@@ -10,42 +10,61 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const accessToken = (session as any).accessToken
   if (!accessToken) return res.status(403).json({ error: "Sin token de Calendar. Cerrá sesión y volvé a entrar." })
 
-  // Calcular rango: hoy 00:00 → mañana 23:59 (hora Argentina UTC-3)
+  // Rango: hoy 00:00 → mañana 23:59 hora local
   const ahora = new Date()
-  // Inicio: hoy a las 00:00:00 hora local
-  const inicio = new Date(ahora)
-  inicio.setHours(0, 0, 0, 0)
-  // Fin: mañana a las 23:59:59 hora local
-  const fin = new Date(ahora)
-  fin.setDate(fin.getDate() + 1)
-  fin.setHours(23, 59, 59, 999)
-
+  const inicio = new Date(ahora); inicio.setHours(0, 0, 0, 0)
+  const fin = new Date(ahora); fin.setDate(fin.getDate() + 1); fin.setHours(23, 59, 59, 999)
   const timeMin = inicio.toISOString()
   const timeMax = fin.toISOString()
 
+  const headers = { Authorization: `Bearer ${accessToken}` }
+
   try {
-    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=20`
-    const gcalRes = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` }
+    // 1. Listar todos los calendarios del usuario
+    const listRes = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", { headers })
+    if (!listRes.ok) {
+      const err = await listRes.text()
+      return res.status(listRes.status).json({ error: err })
+    }
+    const listData = await listRes.json()
+    const calendarios: { id: string; summary: string }[] = (listData.items || [])
+
+    // 2. Traer eventos de cada calendario en paralelo
+    const resultados = await Promise.allSettled(
+      calendarios.map(cal =>
+        fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=50`,
+          { headers }
+        ).then(r => r.json())
+      )
+    )
+
+    // 3. Combinar y ordenar todos los eventos
+    const todosEventos: any[] = []
+    resultados.forEach((r, i) => {
+      if (r.status === "fulfilled" && r.value?.items) {
+        r.value.items.forEach((e: any) => {
+          todosEventos.push({
+            id: e.id,
+            titulo: e.summary || "(Sin título)",
+            inicio: e.start?.dateTime || e.start?.date,
+            fin: e.end?.dateTime || e.end?.date,
+            todoElDia: !e.start?.dateTime,
+            calendario: calendarios[i]?.summary || "",
+            link: e.htmlLink || null,
+          })
+        })
+      }
     })
 
-    if (!gcalRes.ok) {
-      const err = await gcalRes.text()
-      return res.status(gcalRes.status).json({ error: err })
-    }
+    // Ordenar por hora de inicio
+    todosEventos.sort((a, b) => {
+      if (!a.inicio) return 1
+      if (!b.inicio) return -1
+      return new Date(a.inicio).getTime() - new Date(b.inicio).getTime()
+    })
 
-    const data = await gcalRes.json()
-    const eventos = (data.items || []).map((e: any) => ({
-      id: e.id,
-      titulo: e.summary || "(Sin título)",
-      inicio: e.start?.dateTime || e.start?.date,
-      fin: e.end?.dateTime || e.end?.date,
-      todoElDia: !e.start?.dateTime,
-      color: e.colorId || null,
-      link: e.htmlLink || null,
-    }))
-
-    res.json({ eventos })
+    res.json({ eventos: todosEventos })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
