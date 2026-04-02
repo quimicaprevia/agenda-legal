@@ -86,6 +86,34 @@ const S: Record<string,React.CSSProperties> = {
   inputM:      {fontSize:13,padding:"6px 10px",border:"0.5px solid #ccc",borderRadius:8,background:"#f9f9f8",color:"#111",width:"100%",boxSizing:"border-box"},
 }
 
+// ─── COMPONENTE: CERRADOS COLAPSABLE (stats juicios) ─────────────────────────
+function StatsInactivosSection({statsInactivos, total}: {statsInactivos: {estado:string;count:number}[]; total:number}) {
+  const [open, setOpen] = React.useState(false)
+  const totalCerrados = statsInactivos.reduce((acc,s)=>acc+s.count,0)
+  const BG: Record<string,string> = { "Finalizado":"#EAF3DE","Renunciado":"#F1EFE8" }
+  const TX: Record<string,string> = { "Finalizado":"#3B6D11","Renunciado":"#444441" }
+  return (
+    <div style={{marginTop:8,paddingTop:6,borderTop:"0.5px solid #e5e7eb"}}>
+      <div style={{fontSize:12,color:"#aaa",cursor:"pointer",userSelect:"none" as const,padding:"4px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}} onClick={()=>setOpen(v=>!v)}>
+        <span>{open?"▾":"▸"} Cerrados</span>
+        <span style={{fontWeight:600}}>{totalCerrados}</span>
+      </div>
+      {open&&<>
+        {statsInactivos.map(s=>(
+          <div key={s.estado} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0",paddingLeft:12}}>
+            <span style={{fontSize:12,color:"#aaa"}}>{s.estado}</span>
+            <span style={{fontSize:12,fontWeight:600,color:TX[s.estado]||"#aaa",background:BG[s.estado]||"#f0f0f0",padding:"1px 7px",borderRadius:8}}>{s.count}</span>
+          </div>
+        ))}
+        <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",paddingLeft:12,borderTop:"0.5px solid #ebebeb",marginTop:4}}>
+          <span style={{fontSize:12,color:"#aaa"}}>Total</span>
+          <span style={{fontSize:12,fontWeight:600,color:"#aaa"}}>{total}</span>
+        </div>
+      </>}
+    </div>
+  )
+}
+
 // ─── COMPONENTE: HONORARIOS PAGADOS COLAPSABLE ───────────────────────────────
 function PagadosSection({pagados}: {pagados: any[]}) {
   const [open, setOpen] = React.useState(false)
@@ -1461,7 +1489,7 @@ export default function Home() {
         {/* Tareas — destacado en azul */}
         <div
           style={{padding:"8px 14px",cursor:"pointer",fontSize:15,fontWeight:500,color: panel==="tareas"?"#185FA5":"#378ADD",borderLeft: panel==="tareas"?"2px solid #378ADD":"2px solid transparent",background: panel==="tareas"?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}
-          onClick={()=>{setPanel("tareas");tareasScrollRef.current&&(tareasScrollRef.current.scrollTop=0)}}
+          onClick={()=>{actualizarVista();setPanel("tareas");tareasScrollRef.current&&(tareasScrollRef.current.scrollTop=0)}}
         >
           Tareas
           {tareasActivas.length>0&&<span style={S.navBadge}>{tareasActivas.length}</span>}
@@ -1539,6 +1567,9 @@ export default function Home() {
             </>}
             {(filtroEstados.length>0||filtroCategoria)&&<button style={{...S.filterBtn,color:"#888"}} onClick={()=>{setFiltroEstados([]);setFiltroCategoria("")}}>✕</button>}
             <button style={S.btnPrimary} onClick={abrirNuevoJuicio}>+ Nuevo</button>
+            <div style={{marginLeft:"auto"}}>
+              <button style={S.filterBtn} onClick={()=>setStatsVisible(v=>!v)}>{statsVisible?"▶ Panel":"◀ Panel"}</button>
+            </div>
           </div>}
 
           {(panel==="probono"||panel==="docencia"||panel==="consultoria")&&<div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -1584,47 +1615,35 @@ export default function Home() {
                 </div>
                 {/* Barra lateral de stats */}
                 {statsVisible&&(
-                  <div style={{width:190,flexShrink:0,background:"#f9f9f8",border:"0.5px solid #e5e7eb",borderRadius:12,padding:"14px 16px",position:"sticky",top:0,overflowY:"auto",maxHeight:"calc(100vh - 120px)"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                      <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em"}}>POR ESTADO</div>
-                      <button style={{...S.btnMini,fontSize:10}} onClick={()=>setStatsVisible(false)}>✕</button>
-                    </div>
-                    {statsPorEstado.map(s=>(
-                      <div key={s.estado} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"0.5px solid #ebebeb"}}>
-                        <span style={{fontSize:12,color:"#555"}}>{s.estado}</span>
-                        <span style={{fontSize:12,fontWeight:600,color:ESTADOS_TX[s.estado]||"#111",background:ESTADOS_BG[s.estado]||"#f0f0f0",padding:"1px 7px",borderRadius:8}}>{s.count}</span>
-                      </div>
-                    ))}
-                    <div style={{marginTop:8,paddingTop:6,borderTop:"0.5px solid #e5e7eb",display:"flex",justifyContent:"space-between",marginBottom:12}}>
-                      <span style={{fontSize:12,color:"#888"}}>Activos</span>
-                      <span style={{fontSize:12,fontWeight:600}}>{juicios.filter(j=>!INACTIVOS.includes(j.estado)).length}</span>
-                    </div>
-                    {statsInactivos.length>0&&<>
-                      <div style={{fontSize:11,fontWeight:600,color:"#aaa",letterSpacing:"0.06em",marginBottom:6}}>CERRADOS</div>
-                      {statsInactivos.map(s=>(
+                  <div style={{width:190,flexShrink:0,display:"flex",flexDirection:"column",gap:8,position:"sticky",top:0,maxHeight:"calc(100vh - 120px)",overflowY:"auto"}}>
+                    {/* Recuadro POR ESTADO */}
+                    <div style={{background:"#f9f9f8",border:"0.5px solid #e5e7eb",borderRadius:12,padding:"14px 16px"}}>
+                      <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em",marginBottom:10}}>POR ESTADO</div>
+                      {statsPorEstado.map(s=>(
                         <div key={s.estado} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"0.5px solid #ebebeb"}}>
-                          <span style={{fontSize:12,color:"#aaa"}}>{s.estado}</span>
-                          <span style={{fontSize:12,fontWeight:600,color:ESTADOS_TX[s.estado]||"#aaa",background:ESTADOS_BG[s.estado]||"#f0f0f0",padding:"1px 7px",borderRadius:8}}>{s.count}</span>
+                          <span style={{fontSize:12,color:"#555"}}>{s.estado}</span>
+                          <span style={{fontSize:12,fontWeight:600,color:ESTADOS_TX[s.estado]||"#111",background:ESTADOS_BG[s.estado]||"#f0f0f0",padding:"1px 7px",borderRadius:8}}>{s.count}</span>
                         </div>
                       ))}
-                      <div style={{marginTop:8,paddingTop:6,borderTop:"0.5px solid #e5e7eb",display:"flex",justifyContent:"space-between",marginBottom:12}}>
-                        <span style={{fontSize:12,color:"#aaa"}}>Total</span>
-                        <span style={{fontSize:12,fontWeight:600,color:"#aaa"}}>{juicios.length}</span>
+                      <div style={{marginTop:8,paddingTop:6,borderTop:"0.5px solid #e5e7eb",display:"flex",justifyContent:"space-between"}}>
+                        <span style={{fontSize:12,color:"#888"}}>Activos</span>
+                        <span style={{fontSize:12,fontWeight:600}}>{juicios.filter(j=>!INACTIVOS.includes(j.estado)).length}</span>
                       </div>
-                    </>}
-                    {statsPorCategoria.length>0&&<>
-                      <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em",marginBottom:6}}>POR CATEGORÍA</div>
-                      {statsPorCategoria.map(s=>(
-                        <div key={s.categoria} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"0.5px solid #ebebeb"}}>
-                          <span style={{fontSize:12,color:"#555"}}>{s.categoria}</span>
-                          <span style={{fontSize:12,fontWeight:600,color:"#444441",background:"#F1EFE8",padding:"1px 7px",borderRadius:8}}>{s.count}</span>
-                        </div>
-                      ))}
-                    </>}
+                      {statsInactivos.length>0&&<StatsInactivosSection statsInactivos={statsInactivos} total={juicios.length}/>}
+                    </div>
+                    {/* Recuadro POR CATEGORÍA — solo si hay */}
+                    {statsPorCategoria.length>0&&(
+                      <div style={{background:"#f9f9f8",border:"0.5px solid #e5e7eb",borderRadius:12,padding:"14px 16px"}}>
+                        <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em",marginBottom:8}}>POR CATEGORÍA</div>
+                        {statsPorCategoria.map(s=>(
+                          <div key={s.categoria} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"0.5px solid #ebebeb"}}>
+                            <span style={{fontSize:12,color:"#555"}}>{s.categoria}</span>
+                            <span style={{fontSize:12,fontWeight:600,color:"#444441",background:"#F1EFE8",padding:"1px 7px",borderRadius:8}}>{s.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-                {!statsVisible&&(
-                  <button style={{...S.filterBtn,writingMode:"vertical-rl",fontSize:11,padding:"8px 4px"}} onClick={()=>setStatsVisible(true)}>▶ Stats</button>
                 )}
               </div>
             )}
