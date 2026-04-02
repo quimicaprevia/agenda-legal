@@ -325,7 +325,12 @@ export default function Home() {
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission()
     }
-    cargarEventosCalendar().then(() => setPopupCalendarOpen(true))
+    cargarEventosCalendar().then(() => {
+      if (!sessionStorage.getItem("calendarPopupMostrado")) {
+        setPopupCalendarOpen(true)
+        sessionStorage.setItem("calendarPopupMostrado", "1")
+      }
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
 
