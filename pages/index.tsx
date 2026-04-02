@@ -12,6 +12,8 @@ type Asunto    = { id: string; nombre: string; tipo: string; estado: string; adv
 type JuicioForm = { autos: string; estado: string; nro: string; fuero: string; juzgado: string; secretaria: string; sala: string; advertencia: string; datosJuzgado: string; otraInfo: string; compartidoCon: string; categoria: string; driveUrl: string; iaUrl: string; pjnUrl: string }
 type AsuntoForm = { nombre: string; tipo: string; estado: string; advertencia: string; otraInfo: string; driveUrl: string; webUrl: string }
 
+type EventoCalendar = { id: string; titulo: string; inicio: string; fin: string; todoElDia: boolean; color: string|null; link: string|null }
+
 // ─── CONSTANTES ──────────────────────────────────────────────────────────────
 const FORM_JUICIO_VACIO: JuicioForm = { autos:"", estado:"Judicializado", nro:"", fuero:"", juzgado:"", secretaria:"", sala:"", advertencia:"", datosJuzgado:"", otraInfo:"", compartidoCon:"", categoria:"", driveUrl:"", iaUrl:"", pjnUrl:"" }
 const FORM_ASUNTO_VACIO: AsuntoForm = { nombre:"", tipo:"probono", estado:"Abierta", advertencia:"", otraInfo:"", driveUrl:"", webUrl:"" }
@@ -264,6 +266,12 @@ export default function Home() {
   // Ref para scroll del panel de tareas
   const tareasScrollRef = useRef<HTMLDivElement>(null)
 
+  // ─── GOOGLE CALENDAR ─────────────────────────────────────────────────────────
+  const [eventosCalendar, setEventosCalendar] = useState<EventoCalendar[]>([])
+  const [calendarError, setCalendarError]     = useState<string|null>(null)
+  const [popupCalendarOpen, setPopupCalendarOpen] = useState(false)
+  const notifProgramadasRef = useRef<Set<string>>(new Set())
+
   // Cerrar calendario al clickear afuera
   useEffect(() => {
     if (!posponerOpen) return
@@ -310,6 +318,108 @@ export default function Home() {
       }).catch(()=>setLoading(false))
     }
   }, [session])
+
+  // Cargar calendar al iniciar sesión
+  useEffect(() => {
+    if (!session) return
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission()
+    }
+    cargarEventosCalendar().then(() => setPopupCalendarOpen(true))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session])
+
+  // ─── CARGAR EVENTOS DE CALENDAR ──────────────────────────────────────────────
+  const cargarEventosCalendar = async () => {
+    try {
+      const res = await fetch("/api/calendar")
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({error:"Error desconocido"}))
+        setCalendarError(err.error || "Error al cargar Calendar")
+        return
+      }
+      const data = await res.json()
+      const eventos: EventoCalendar[] = data.eventos || []
+      setEventosCalendar(eventos)
+      setCalendarError(null)
+      programarNotificaciones(eventos)
+    } catch {
+      setCalendarError("No se pudo conectar con Calendar")
+    }
+  }
+
+  const programarNotificaciones = (eventos: EventoCalendar[]) => {
+    if (typeof window === "undefined" || !("Notification" in window)) return
+    const ahora = new Date()
+    const hoy = new Date(); hoy.setHours(0,0,0,0)
+    const manana = new Date(hoy); manana.setDate(manana.getDate()+1)
+    eventos.forEach(ev => {
+      if (ev.todoElDia || !ev.inicio) return
+      const inicio = new Date(ev.inicio)
+      if (inicio < hoy || inicio >= manana) return
+      const msAntes = inicio.getTime() - 30*60*1000 - ahora.getTime()
+      const key = `notif-${ev.id}`
+      if (msAntes > 0 && !notifProgramadasRef.current.has(key)) {
+        notifProgramadasRef.current.add(key)
+        setTimeout(() => {
+          if (Notification.permission === "granted") {
+            new Notification("⏰ Recordatorio — Agenda Legal", {
+              body: `En 30 min: ${ev.titulo}`,
+              icon: "/favicon.ico",
+            })
+          }
+        }, msAntes)
+      }
+    })
+  }
+
+  const formatHoraEvento = (isoStr: string, todoElDia: boolean) => {
+    if (todoElDia) return "Todo el día"
+    const d = new Date(isoStr)
+    return d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
+  }
+
+  const esHoyEvento = (isoStr: string, todoElDia: boolean) => {
+    const d = todoElDia ? new Date(isoStr+"T00:00:00") : new Date(isoStr)
+    const h = new Date(); h.setHours(0,0,0,0)
+    const mn = new Date(h); mn.setDate(mn.getDate()+1)
+    return d >= h && d < mn
+  }
+
+  const esMañanaEvento = (isoStr: string, todoElDia: boolean) => {
+    const d = todoElDia ? new Date(isoStr+"T00:00:00") : new Date(isoStr)
+    const h = new Date(); h.setHours(0,0,0,0)
+    const mn = new Date(h); mn.setDate(mn.getDate()+1)
+    const pm = new Date(h); pm.setDate(pm.getDate()+2)
+    return d >= mn && d < pm
+  }
+
+  const renderRecuadroCalendar = () => {
+    const eventosHoy = eventosCalendar.filter(ev => esHoyEvento(ev.inicio, ev.todoElDia))
+    return (
+      <div style={{margin:"14px 0 0 0",paddingTop:12,borderTop:"0.5px solid #e5e7eb"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em"}}>📅 HOY EN CALENDAR</div>
+          <button style={{...S.btnMini,fontSize:10}} onClick={cargarEventosCalendar}>↻</button>
+        </div>
+        {calendarError && (
+          <div style={{fontSize:11,color:"#A32D2D",background:"#fff5f5",border:"0.5px solid #f5c5c5",borderRadius:6,padding:"6px 8px",marginBottom:6}}>
+            {calendarError.includes("Sin token") ? "Cerrá sesión y volvé a entrar para activar Calendar." : calendarError}
+          </div>
+        )}
+        {!calendarError && eventosHoy.length === 0 && (
+          <div style={{fontSize:12,color:"#aaa"}}>Sin eventos hoy</div>
+        )}
+        {eventosHoy.map(ev => (
+          <div key={ev.id} style={{background:"#fff",border:"0.5px solid #e5e7eb",borderRadius:8,padding:"7px 10px",marginBottom:5}}>
+            <div style={{fontSize:12,fontWeight:500,color:"#185FA5",lineHeight:1.3}}>{ev.titulo}</div>
+            <div style={{fontSize:11,color:"#888",marginTop:2}}>{formatHoraEvento(ev.inicio, ev.todoElDia)}</div>
+          </div>
+        ))}
+        <a href="https://calendar.google.com/calendar/u/0/r" target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:"#185FA5",display:"block",marginTop:6,textAlign:"center" as const}}>Ver Calendar →</a>
+      </div>
+    )
+  }
 
   if (status==="loading") return <div style={S.loading}>Cargando...</div>
   if (!session) return (
@@ -900,6 +1010,7 @@ export default function Home() {
             <div style={{fontSize:12,color:"#888",marginTop:2}}>{m.label}</div>
           </div>
         ))}
+        {renderRecuadroCalendar()}
       </div>
     )
     if (asuntoPanel) {
@@ -1416,7 +1527,56 @@ export default function Home() {
   return (
     <div style={S.app}>
 
-      {/* ── Modal Juicio ── */}
+      {/* ── Popup Calendar al abrir ── */}
+      {popupCalendarOpen&&(
+        <div style={S.overlay} onClick={()=>setPopupCalendarOpen(false)}>
+          <div style={{...S.modal,width:"min(480px,95vw)",maxHeight:"80vh"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div style={{fontWeight:600,fontSize:15}}>📅 Agenda del día</div>
+              <button style={S.btnMini} onClick={()=>setPopupCalendarOpen(false)}>✕</button>
+            </div>
+            {calendarError&&(
+              <div style={{fontSize:13,color:"#A32D2D",background:"#fff5f5",border:"0.5px solid #f5c5c5",borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+                {calendarError.includes("Sin token")?"Cerrá sesión y volvé a entrar para conectar Google Calendar.":calendarError}
+              </div>
+            )}
+            {/* HOY */}
+            {(()=>{
+              const hoy = eventosCalendar.filter(ev=>esHoyEvento(ev.inicio,ev.todoElDia))
+              return (
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#378ADD",letterSpacing:"0.06em",marginBottom:8}}>HOY</div>
+                  {hoy.length===0?<div style={{fontSize:13,color:"#aaa"}}>Sin eventos</div>:hoy.map(ev=>(
+                    <div key={ev.id} style={{background:"#E6F1FB",border:"0.5px solid #b5d4f4",borderRadius:8,padding:"9px 12px",marginBottom:6}}>
+                      <div style={{fontSize:13,fontWeight:500,color:"#185FA5"}}>{ev.titulo}</div>
+                      <div style={{fontSize:12,color:"#555",marginTop:3}}>{formatHoraEvento(ev.inicio,ev.todoElDia)}</div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+            {/* MAÑANA */}
+            {(()=>{
+              const man = eventosCalendar.filter(ev=>esMañanaEvento(ev.inicio,ev.todoElDia))
+              return (
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#888",letterSpacing:"0.06em",marginBottom:8}}>MAÑANA</div>
+                  {man.length===0?<div style={{fontSize:13,color:"#aaa"}}>Sin eventos</div>:man.map(ev=>(
+                    <div key={ev.id} style={{background:"#f9f9f8",border:"0.5px solid #e5e7eb",borderRadius:8,padding:"9px 12px",marginBottom:6}}>
+                      <div style={{fontSize:13,fontWeight:500,color:"#333"}}>{ev.titulo}</div>
+                      <div style={{fontSize:12,color:"#888",marginTop:3}}>{formatHoraEvento(ev.inicio,ev.todoElDia)}</div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:20}}>
+              <a href="https://calendar.google.com/calendar/u/0/r" target="_blank" rel="noopener noreferrer" style={{...S.linkDrive,fontSize:13}}>📅 Abrir Google Calendar</a>
+              <button style={S.btnPrimary} onClick={()=>setPopupCalendarOpen(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
       {modalJuicioOpen&&(
         <div style={S.overlay} onClick={()=>setModalJuicioOpen(false)}>
           <div style={S.modal} onClick={e=>e.stopPropagation()}>
@@ -1489,7 +1649,7 @@ export default function Home() {
         {/* Tareas — destacado en azul */}
         <div
           style={{padding:"8px 14px",cursor:"pointer",fontSize:15,fontWeight:500,color: panel==="tareas"?"#185FA5":"#378ADD",borderLeft: panel==="tareas"?"2px solid #378ADD":"2px solid transparent",background: panel==="tareas"?"#fff":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}
-          onClick={()=>{actualizarVista();setPanel("tareas");tareasScrollRef.current&&(tareasScrollRef.current.scrollTop=0)}}
+          onClick={()=>{actualizarVista();setPanel("tareas");cargarEventosCalendar();tareasScrollRef.current&&(tareasScrollRef.current.scrollTop=0)}}
         >
           Tareas
           {tareasActivas.length>0&&<span style={S.navBadge}>{tareasActivas.length}</span>}
@@ -1504,7 +1664,7 @@ export default function Home() {
           {id:"consultoria",  label:"Consultoría",         badge:asuntosConsultoria.length||null},
           {id:"personales",   label:"Asuntos Personales",  badge:tareasPersonales.length||null},
         ].map(item=>(
-          <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>{setPanel(item.id);tareasScrollRef.current&&(tareasScrollRef.current.scrollTop=0)}}>
+          <div key={item.id} style={{...S.navItem,...(panel===item.id?S.navItemActive:{})}} onClick={()=>{setPanel(item.id);if(item.id==="juicios")cargarEventosCalendar();tareasScrollRef.current&&(tareasScrollRef.current.scrollTop=0)}}>
             {item.label}
             {item.badge!=null&&item.badge>0?<span style={S.navBadge}>{item.badge}</span>:null}
           </div>
@@ -1522,7 +1682,18 @@ export default function Home() {
           </div>
         ))}
 
-        <div style={{flex:1}}/>
+        <div style={{flex:1}}/>\
+        {/* Botón Calendar */}
+        <div style={{padding:"0 14px 6px"}}>
+          <a
+            href="https://calendar.google.com/calendar/u/0/r"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{...S.btn,fontSize:12,width:"100%",textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:6,boxSizing:"border-box" as const}}
+          >
+            📅 Google Calendar
+          </a>
+        </div>
         <div style={{padding:"10px 14px",borderTop:"0.5px solid #e5e7eb",display:"flex",flexDirection:"column",gap:6}}>
           <button style={{...S.btn,fontSize:12,width:"100%"}} onClick={descargarBackup}>⬇ Backup</button>
           {juicios.length===0&&<button style={{...S.btnPrimary,fontSize:12,width:"100%"}} onClick={async()=>{const r=await fetch('/api/seed',{method:'POST'});const d=await r.json();if(d.ok)window.location.reload();else alert(d.msg||'Error')}}>Importar datos</button>}
@@ -1643,6 +1814,10 @@ export default function Home() {
                         ))}
                       </div>
                     )}
+                    {/* Recuadro Calendar */}
+                    <div style={{background:"#f9f9f8",border:"0.5px solid #e5e7eb",borderRadius:12,padding:"14px 16px"}}>
+                      {renderRecuadroCalendar()}
+                    </div>
                   </div>
                 )}
               </div>

@@ -8,6 +8,11 @@ export const authOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope: "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+        },
+      },
     }),
   ],
   secret: process.env.NEXTAUTH_SECRET,
@@ -21,11 +26,20 @@ export const authOptions = {
       })
       return true
     },
-    async session({ session }: any) {
+    async jwt({ token, account }: any) {
+      // Al hacer login, account contiene el access_token de Google
+      if (account?.access_token) {
+        token.accessToken = account.access_token
+      }
+      return token
+    },
+    async session({ session, token }: any) {
       if (session.user?.email) {
         const dbUser = await prisma.user.findUnique({ where: { email: session.user.email } })
         if (dbUser) session.user.id = dbUser.id
       }
+      // Pasar el token a la sesión para usarlo en el servidor
+      session.accessToken = token.accessToken
       return session
     },
   },
