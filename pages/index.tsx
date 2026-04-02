@@ -1567,9 +1567,9 @@ export default function Home() {
             </>}
             {(filtroEstados.length>0||filtroCategoria)&&<button style={{...S.filterBtn,color:"#888"}} onClick={()=>{setFiltroEstados([]);setFiltroCategoria("")}}>✕</button>}
             <button style={S.btnPrimary} onClick={abrirNuevoJuicio}>+ Nuevo</button>
-            <div style={{marginLeft:"auto"}}>
-              <button style={S.filterBtn} onClick={()=>setStatsVisible(v=>!v)}>{statsVisible?"▶ Panel":"◀ Panel"}</button>
-            </div>
+          </div>}
+          {panel==="juicios"&&<div style={{marginLeft:"auto"}}>
+            <button style={S.filterBtn} onClick={()=>setStatsVisible(v=>!v)}>{statsVisible?"▶ Panel":"◀ Panel"}</button>
           </div>}
 
           {(panel==="probono"||panel==="docencia"||panel==="consultoria")&&<div style={{display:"flex",gap:6,alignItems:"center"}}>
